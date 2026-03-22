@@ -12,9 +12,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
+      - name: Prepare basic example
+        run: go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
       - name: Run tests
         run: go test ./...
       - name: Run asm benchmarks
@@ -27,9 +30,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
+      - name: Prepare basic example
+        run: go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
       - name: Run tests
         run: go test ./...
       - name: Cross-check linux amd64 build
