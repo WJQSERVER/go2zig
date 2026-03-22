@@ -1,0 +1,90 @@
+//go:build amd64
+
+#include "textflag.h"
+
+#ifdef GOOS_windows
+#define RARG0 CX
+#define RARG1 DX
+#define RARG2 R8
+#define RTMP0 R9
+#define RTMP1 R10
+#define RTMP2 R11
+#define SHADOW_SPACE SUBQ $32, SP
+#define RESTORE_SHADOW ADDQ $32, SP
+#else
+#define RARG0 DI
+#define RARG1 SI
+#define RARG2 DX
+#define RTMP0 R8
+#define RTMP1 R9
+#define RTMP2 R10
+#define SHADOW_SPACE
+#define RESTORE_SHADOW
+#endif
+
+#define G0ASMCALL                                         \
+    MOVQ    SP, RTMP0                                     \
+    MOVQ    0x30(g), RTMP1                                \
+    MOVQ    0x0(RTMP1), RTMP1                             \
+    MOVQ    g, RTMP2                                      \
+    MOVQ    RTMP1, g                                      \
+    MOVQ    0x38(RTMP1), SP                               \
+    ANDQ    $-16, SP                                      \
+    PUSHQ   RTMP0                                         \
+    PUSHQ   RTMP2                                         \
+    SHADOW_SPACE                                          \
+    CALL    AX                                            \
+    RESTORE_SHADOW                                        \
+    POPQ    g                                             \
+    POPQ    SP                                            \
+    RET
+
+#define ASMCALL                                           \
+    SHADOW_SPACE                                          \
+    CALL    AX                                            \
+    RESTORE_SHADOW                                        \
+    RET
+
+TEXT ·CallFuncG0P0(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	G0ASMCALL
+
+TEXT ·CallFuncG0P1(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	MOVQ	arg0+0x8(FP), RARG0
+	G0ASMCALL
+
+TEXT ·CallFuncG0P2(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	MOVQ	arg0+0x8(FP), RARG0
+	MOVQ	arg1+0x10(FP), RARG1
+	G0ASMCALL
+
+TEXT ·CallFuncG0P3(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	MOVQ	arg0+0x8(FP), RARG0
+	MOVQ	arg1+0x10(FP), RARG1
+	MOVQ	arg2+0x18(FP), RARG2
+	G0ASMCALL
+
+TEXT ·CallFuncP0(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	ASMCALL
+
+TEXT ·CallFuncP1(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	MOVQ	arg0+0x8(FP), RARG0
+	ASMCALL
+
+TEXT ·CallFuncP2(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	MOVQ	arg0+0x8(FP), RARG0
+	MOVQ	arg1+0x10(FP), RARG1
+	ASMCALL
+
+TEXT ·CallFuncP3(SB), NOSPLIT|NOPTR|NOFRAME, $0
+	MOVQ	fn+0x0(FP), AX
+	MOVQ	arg0+0x8(FP), RARG0
+	MOVQ	arg1+0x10(FP), RARG1
+	MOVQ	arg2+0x18(FP), RARG2
+	ASMCALL
