@@ -12,7 +12,7 @@
 
 ## 当前进展
 
-- 已完成 `windows/amd64` 下无 `cgo` 的底层调用运行时：`asmcall` + 动态库符号加载
+- 已完成 `windows/amd64` 与 `linux/amd64` 下无 `cgo` 的底层调用运行时：`asmcall` + 动态库符号加载
 - 正在把代码生成器切换到新的无 `cgo` 桥接方案
 - 目标是优先覆盖高频短调用场景，并结合 Zig 分配器特性降低返回值拷贝成本
 
@@ -72,7 +72,7 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 - `gen.go`
 - `go2zig_runtime.zig`
 - `go2zig_exports.zig`
-- `basic.dll`（当前 windows）
+- `basic.dll` / `libbasic.so`（按目标平台生成）
 
 如果你显式传入 `-header`，会额外尝试让 Zig 输出 C 头文件。
 
@@ -103,7 +103,7 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 go run ./examples/basic
 ```
 
-说明：当前无 `cgo` 高性能运行时优先支持 `windows/amd64`。
+说明：当前无 `cgo` 高性能运行时优先支持 `windows/amd64` 与 `linux/amd64`。
 
 ## 后续可扩展方向
 
@@ -111,5 +111,5 @@ go run ./examples/basic
 - 切片和数组支持
 - `go:generate` 辅助指令
 - 更完整的 build helper，与 `go build`/`go generate` 深度集成
-- 扩展到 `linux/amd64`、`arm64`
+- 扩展到 `arm64`
 - 进一步压缩 frame 布局和返回值分配开销
