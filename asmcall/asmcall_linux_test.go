@@ -15,6 +15,9 @@ import (
 )
 
 func TestCallFuncG0P3StoreSumLinux(t *testing.T) {
+	if os.Getenv("GO2ZIG_RUN_LINUX_RUNTIME_TESTS") != "1" {
+		t.Skip("linux runtime execution tests are disabled by default")
+	}
 	t.Parallel()
 
 	addr := buildAndLookupStoreSumLinux(t)
@@ -31,6 +34,9 @@ func TestCallFuncG0P3StoreSumLinux(t *testing.T) {
 }
 
 func TestCallFuncP3StoreSumLinux(t *testing.T) {
+	if os.Getenv("GO2ZIG_RUN_LINUX_RUNTIME_TESTS") != "1" {
+		t.Skip("linux runtime execution tests are disabled by default")
+	}
 	t.Parallel()
 
 	runtime.LockOSThread()

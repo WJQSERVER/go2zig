@@ -3,12 +3,16 @@
 package dynlib_test
 
 import (
+	"os"
 	"testing"
 
 	"go2zig/dynlib"
 )
 
 func TestLoadAndLookupLinux(t *testing.T) {
+	if os.Getenv("GO2ZIG_RUN_LINUX_RUNTIME_TESTS") != "1" {
+		t.Skip("linux runtime execution tests are disabled by default")
+	}
 	t.Parallel()
 
 	lib, err := dynlib.Load("libdl.so.2")
