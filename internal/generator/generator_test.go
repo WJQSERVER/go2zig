@@ -59,6 +59,9 @@ func TestRender(t *testing.T) {
 		pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 		pub extern fn mirror_users(users: UserList) UserList;
 		pub extern fn mirror_buckets(buckets: BucketList) BucketList;
+		pub extern fn maybe_kind(flag: bool) ?UserKind;
+		pub extern fn maybe_digest(flag: bool) ?Digest;
+		pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
 	`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -97,6 +100,11 @@ func TestRender(t *testing.T) {
 		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
 		"func (c *Go2ZigClient) MirrorUsers(users UserList) UserList",
 		"func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList",
+		"func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind",
+		"func (c *Go2ZigClient) MaybeDigest(flag bool) *Digest",
+		"func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32",
+		"type _go2zigOptional_optional_",
+		"func _go2zigRefOptional_",
 		"func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult",
 		"func _go2zigRefUserList(value UserList) _go2zigRefUserListResult",
 		"func _go2zigRefBucketList(value BucketList) _go2zigRefBucketListResult",

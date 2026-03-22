@@ -106,6 +106,9 @@ pub extern fn duplicate_digest(seed: String) DigestList;
 pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 pub extern fn mirror_users(users: UserList) UserList;
 pub extern fn mirror_buckets(buckets: BucketList) BucketList;
+pub extern fn maybe_kind(flag: bool) ?UserKind;
+pub extern fn maybe_digest(flag: bool) ?Digest;
+pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
 `
 
 func TestParse(t *testing.T) {
@@ -128,8 +131,8 @@ func TestParse(t *testing.T) {
 	if len(api.Slices) != 6 {
 		t.Fatalf("Parse() slices = %d, want 6", len(api.Slices))
 	}
-	if len(api.Funcs) != 12 {
-		t.Fatalf("Parse() funcs = %d, want 12", len(api.Funcs))
+	if len(api.Funcs) != 15 {
+		t.Fatalf("Parse() funcs = %d, want 15", len(api.Funcs))
 	}
 
 	if api.Struct("String") != nil || api.Struct("Bytes") != nil {
@@ -194,6 +197,15 @@ func TestParse(t *testing.T) {
 	}
 	if got := api.Funcs[11].Params[0].Type.Elem.Kind; got != model.TypeStruct {
 		t.Fatalf("mirror_buckets elem kind = %v, want struct", got)
+	}
+	if got := api.Funcs[12].Return.Kind; got != model.TypeOptional {
+		t.Fatalf("maybe_kind return kind = %v, want optional", got)
+	}
+	if got := api.Funcs[13].Return.Elem.Kind; got != model.TypeArray {
+		t.Fatalf("maybe_digest payload kind = %v, want array", got)
+	}
+	if got := api.Funcs[14].Params[1].Type.Kind; got != model.TypeOptional {
+		t.Fatalf("choose_limit second param kind = %v, want optional", got)
 	}
 }
 

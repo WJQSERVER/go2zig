@@ -41,6 +41,9 @@ type _go2zigRuntime struct {
 	procMirrorMetrics     uintptr
 	procMirrorUsers       uintptr
 	procMirrorBuckets     uintptr
+	procMaybeKind         uintptr
+	procMaybeDigest       uintptr
+	procChooseLimit       uintptr
 	err                   error
 }
 
@@ -106,6 +109,18 @@ func (rt *_go2zigRuntime) Load() error {
 		}
 		if rt.procMirrorBuckets, err = lib.Lookup("go2zig_call_mirror_buckets"); err != nil {
 			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_buckets: %w", err)
+			return
+		}
+		if rt.procMaybeKind, err = lib.Lookup("go2zig_call_maybe_kind"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_maybe_kind: %w", err)
+			return
+		}
+		if rt.procMaybeDigest, err = lib.Lookup("go2zig_call_maybe_digest"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_maybe_digest: %w", err)
+			return
+		}
+		if rt.procChooseLimit, err = lib.Lookup("go2zig_call_choose_limit"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_choose_limit: %w", err)
 			return
 		}
 	})
@@ -249,6 +264,66 @@ const (
 )
 
 type Digest [4]uint8
+
+type _go2zigOptional_optional_1_u32 struct {
+	is_set uint8
+	value  uint32
+}
+
+func _go2zigRefOptional_optional_1_u32(value *uint32) _go2zigOptional_optional_1_u32 {
+	if value == nil {
+		return _go2zigOptional_optional_1_u32{}
+	}
+	return _go2zigOptional_optional_1_u32{is_set: 1, value: uint32(*value)}
+}
+
+func _go2zigOwnOptional_optional_1_u32(rt *_go2zigRuntime, value _go2zigOptional_optional_1_u32) *uint32 {
+	if value.is_set == 0 {
+		return nil
+	}
+	item := uint32(value.value)
+	return &item
+}
+
+type _go2zigOptional_optional_5_UserKind struct {
+	is_set uint8
+	value  uint8
+}
+
+func _go2zigRefOptional_optional_5_UserKind(value *UserKind) _go2zigOptional_optional_5_UserKind {
+	if value == nil {
+		return _go2zigOptional_optional_5_UserKind{}
+	}
+	return _go2zigOptional_optional_5_UserKind{is_set: 1, value: uint8(*value)}
+}
+
+func _go2zigOwnOptional_optional_5_UserKind(rt *_go2zigRuntime, value _go2zigOptional_optional_5_UserKind) *UserKind {
+	if value.is_set == 0 {
+		return nil
+	}
+	item := UserKind(value.value)
+	return &item
+}
+
+type _go2zigOptional_optional_arrayalias_Digest struct {
+	is_set uint8
+	value  [4]uint8
+}
+
+func _go2zigRefOptional_optional_arrayalias_Digest(value *Digest) _go2zigOptional_optional_arrayalias_Digest {
+	if value == nil {
+		return _go2zigOptional_optional_arrayalias_Digest{}
+	}
+	return _go2zigOptional_optional_arrayalias_Digest{is_set: 1, value: _go2zigRefArray_arrayalias_Digest(*value)}
+}
+
+func _go2zigOwnOptional_optional_arrayalias_Digest(rt *_go2zigRuntime, value _go2zigOptional_optional_arrayalias_Digest) *Digest {
+	if value.is_set == 0 {
+		return nil
+	}
+	item := _go2zigOwnArray_arrayalias_Digest(rt, value.value)
+	return &item
+}
 
 type ScoreList []uint16
 
@@ -747,6 +822,22 @@ type _go2zigCallMirrorBuckets struct {
 	out     _go2zigBucketList
 }
 
+type _go2zigCallMaybeKind struct {
+	flag uint8
+	out  _go2zigOptional_optional_5_UserKind
+}
+
+type _go2zigCallMaybeDigest struct {
+	flag uint8
+	out  _go2zigOptional_optional_arrayalias_Digest
+}
+
+type _go2zigCallChooseLimit struct {
+	flag  uint8
+	value _go2zigOptional_optional_1_u32
+	out   _go2zigOptional_optional_1_u32
+}
+
 func (c *Go2ZigClient) Health() bool {
 	var frame _go2zigCallHealth
 	c.rt.call(c.rt.procHealth, unsafe.Pointer(&frame))
@@ -909,4 +1000,42 @@ func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList {
 
 func MirrorBuckets(buckets BucketList) BucketList {
 	return Default.MirrorBuckets(buckets)
+}
+
+func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind {
+	var frame _go2zigCallMaybeKind
+	frame.flag = _go2zigBool(flag)
+	c.rt.call(c.rt.procMaybeKind, unsafe.Pointer(&frame))
+	runtime.KeepAlive(flag)
+	return _go2zigOwnOptional_optional_5_UserKind(c.rt, frame.out)
+}
+
+func MaybeKind(flag bool) *UserKind {
+	return Default.MaybeKind(flag)
+}
+
+func (c *Go2ZigClient) MaybeDigest(flag bool) *Digest {
+	var frame _go2zigCallMaybeDigest
+	frame.flag = _go2zigBool(flag)
+	c.rt.call(c.rt.procMaybeDigest, unsafe.Pointer(&frame))
+	runtime.KeepAlive(flag)
+	return _go2zigOwnOptional_optional_arrayalias_Digest(c.rt, frame.out)
+}
+
+func MaybeDigest(flag bool) *Digest {
+	return Default.MaybeDigest(flag)
+}
+
+func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32 {
+	var frame _go2zigCallChooseLimit
+	frame.flag = _go2zigBool(flag)
+	frame.value = _go2zigRefOptional_optional_1_u32(value)
+	c.rt.call(c.rt.procChooseLimit, unsafe.Pointer(&frame))
+	runtime.KeepAlive(flag)
+	runtime.KeepAlive(value)
+	return _go2zigOwnOptional_optional_1_u32(c.rt, frame.out)
+}
+
+func ChooseLimit(flag bool, value *uint32) *uint32 {
+	return Default.ChooseLimit(flag, value)
 }

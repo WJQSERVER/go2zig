@@ -139,3 +139,28 @@ func TestNewResolvesPODSliceAliases(t *testing.T) {
 		t.Fatal("POD slice params should not require arena allocation")
 	}
 }
+
+func TestOptionalPODTraits(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(nil, nil, nil, nil, []*Function{{
+		Name: "choose_limit",
+		Params: []Field{{
+			Name: "value",
+			Type: TypeRef{Kind: TypeOptional, Raw: "?u32", Elem: &TypeRef{Kind: TypePrimitive, Name: "u32", Raw: "u32", Primitive: PrimitiveInfo{Go: "uint32", Zig: "u32"}}},
+		}},
+		Return: TypeRef{Kind: TypeOptional, Raw: "?u32", Elem: &TypeRef{Kind: TypePrimitive, Name: "u32", Raw: "u32", Primitive: PrimitiveInfo{Go: "uint32", Zig: "u32"}}},
+	}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.IsPOD(api.Funcs[0].Params[0].Type) {
+		t.Fatal("optional u32 should be POD")
+	}
+	if api.TypeNeedsFree(api.Funcs[0].Return) {
+		t.Fatal("optional u32 should not require free")
+	}
+	if api.TypeNeedsKeepAlive(api.Funcs[0].Return) {
+		t.Fatal("optional u32 should not require keepalive")
+	}
+}

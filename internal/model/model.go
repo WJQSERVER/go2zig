@@ -16,6 +16,7 @@ const (
 	TypeBytes
 	TypeStruct
 	TypeEnum
+	TypeOptional
 	TypeSlice
 	TypeArray
 )
@@ -247,6 +248,11 @@ func (a *API) resolveType(t *TypeRef, owner string) error {
 			return fmt.Errorf("%s uses malformed slice type %q", owner, t.Raw)
 		}
 		return a.resolveType(t.Elem, owner)
+	case TypeOptional:
+		if t.Elem == nil {
+			return fmt.Errorf("%s uses malformed optional type %q", owner, t.Raw)
+		}
+		return a.resolveType(t.Elem, owner)
 	default:
 		return nil
 	}
@@ -279,6 +285,11 @@ func (t TypeRef) TypeName() string {
 	switch t.Kind {
 	case TypeStruct, TypeEnum:
 		return t.Name
+	case TypeOptional:
+		if t.Elem == nil {
+			return t.Raw
+		}
+		return "?" + t.Elem.TypeName()
 	case TypeSlice:
 		return t.Name
 	case TypeArray:
@@ -301,6 +312,11 @@ func (t TypeRef) Key() string {
 			return strings.TrimSpace(t.Raw)
 		}
 		return fmt.Sprintf("slice:%s", t.Elem.Key())
+	case TypeOptional:
+		if t.Elem == nil {
+			return strings.TrimSpace(t.Raw)
+		}
+		return fmt.Sprintf("optional:%s", t.Elem.Key())
 	case TypeArray:
 		if t.Alias != "" {
 			return "arrayalias:" + t.Alias
@@ -344,6 +360,11 @@ func (a *API) typeNeedsAllocation(t TypeRef, seen map[string]bool) bool {
 		return true
 	case TypeSlice:
 		return false
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.typeNeedsAllocation(*t.Elem, seen)
 	case TypeArray:
 		if t.Elem == nil {
 			return false
@@ -377,6 +398,11 @@ func (a *API) typeNeedsFree(t TypeRef, seen map[string]bool) bool {
 		return true
 	case TypeSlice:
 		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.typeNeedsFree(*t.Elem, seen)
 	case TypeArray:
 		if t.Elem == nil {
 			return false
@@ -433,6 +459,11 @@ func (a *API) SortedStructs() ([]*Struct, error) {
 				return fmt.Errorf("%s uses malformed slice type %q", owner, t.Raw)
 			}
 			return visitType(owner, *t.Elem)
+		case TypeOptional:
+			if t.Elem == nil {
+				return fmt.Errorf("%s uses malformed optional type %q", owner, t.Raw)
+			}
+			return visitType(owner, *t.Elem)
 		default:
 			return nil
 		}
@@ -469,6 +500,11 @@ func (a *API) IsPOD(t TypeRef) bool {
 	switch t.Kind {
 	case TypePrimitive, TypeEnum:
 		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
 	case TypeArray:
 		if t.Elem == nil {
 			return false
@@ -494,6 +530,11 @@ func (a *API) SupportsSliceElem(t TypeRef) bool {
 	switch t.Kind {
 	case TypePrimitive, TypeEnum, TypeString, TypeBytes:
 		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
 	case TypeArray:
 		if t.Elem == nil {
 			return false
@@ -525,6 +566,11 @@ func (a *API) TypeNeedsKeepAlive(t TypeRef) bool {
 	switch t.Kind {
 	case TypeSlice:
 		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.TypeNeedsKeepAlive(*t.Elem)
 	case TypeArray:
 		if t.Elem == nil {
 			return false

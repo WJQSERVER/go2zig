@@ -126,3 +126,18 @@ pub fn mirror_buckets(buckets: api.BucketList) api.BucketList {
     }
     return rt.ownBucketList(out);
 }
+
+pub fn maybe_kind(flag: bool) ?api.UserKind {
+    if (!flag) return null;
+    return api.UserKind.admin;
+}
+
+pub fn maybe_digest(flag: bool) ?api.Digest {
+    if (!flag) return null;
+    return .{ 9, 8, 7, 6 };
+}
+
+pub fn choose_limit(flag: bool, value: ?u32) ?u32 {
+    if (!flag) return null;
+    return if (value) |item| item + 1 else 1;
+}

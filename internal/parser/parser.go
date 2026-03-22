@@ -15,7 +15,7 @@ var (
 	enumPattern       = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*enum\s*\(([^)]+)\)\s*\{(.*?)\}\s*;`)
 	slicePattern      = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{\s*ptr\s*:\s*\?\s*\[\*\]const\s+([^,]+),\s*len\s*:\s*usize\s*,?\s*\}\s*;`)
 	arrayAliasPattern = regexp.MustCompile(`(?m)^\s*pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\[[^;=]+)\s*;\s*$`)
-	funcPattern       = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
+	funcPattern       = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?\?*(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
 	arrayPattern      = regexp.MustCompile(`^\[(\d+)\](.+)$`)
 )
 
@@ -224,8 +224,12 @@ func parseType(raw string) (model.TypeRef, error) {
 	if raw == "" {
 		return model.TypeRef{}, fmt.Errorf("type is empty")
 	}
-	for strings.HasPrefix(raw, "?") {
-		raw = strings.TrimSpace(strings.TrimPrefix(raw, "?"))
+	if strings.HasPrefix(raw, "?") {
+		elem, err := parseType(strings.TrimSpace(strings.TrimPrefix(raw, "?")))
+		if err != nil {
+			return model.TypeRef{}, err
+		}
+		return model.TypeRef{Kind: model.TypeOptional, Raw: raw, Elem: &elem}, nil
 	}
 	if match := arrayPattern.FindStringSubmatch(raw); match != nil {
 		length, err := strconv.Atoi(match[1])

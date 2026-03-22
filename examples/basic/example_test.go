@@ -115,4 +115,28 @@ func TestExampleAPI(t *testing.T) {
 	if len(buckets) != 2 || len(buckets[0].Scores) != 3 || buckets[1].Scores[2] != 9 {
 		t.Fatalf("MirrorBuckets() result = %v, want mirrored buckets", buckets)
 	}
+
+	kind := MaybeKind(true)
+	if kind == nil || *kind != UserKindAdmin {
+		t.Fatalf("MaybeKind(true) = %v, want admin", kind)
+	}
+	if got := MaybeKind(false); got != nil {
+		t.Fatalf("MaybeKind(false) = %v, want nil", got)
+	}
+	digestPtr := MaybeDigest(true)
+	if digestPtr == nil || (*digestPtr)[1] != 8 {
+		t.Fatalf("MaybeDigest(true) = %v, want digest with second byte 8", digestPtr)
+	}
+	base := uint32(9)
+	limit := ChooseLimit(true, &base)
+	if limit == nil || *limit != 10 {
+		t.Fatalf("ChooseLimit(true,&base) = %v, want 10", limit)
+	}
+	defaultLimit := ChooseLimit(true, nil)
+	if defaultLimit == nil || *defaultLimit != 1 {
+		t.Fatalf("ChooseLimit(true,nil) = %v, want 1", defaultLimit)
+	}
+	if got := ChooseLimit(false, &base); got != nil {
+		t.Fatalf("ChooseLimit(false,&base) = %v, want nil", got)
+	}
 }

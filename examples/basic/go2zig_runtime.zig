@@ -119,3 +119,54 @@ pub fn ownBucketList(value: []const api.Bucket) api.BucketList {
     @memcpy(buf, value);
     return .{ .ptr = buf.ptr, .len = buf.len };
 }
+
+pub const Optional_optional_1_u32 = extern struct {
+    is_set: u8,
+    value: u32,
+};
+
+pub inline fn toOptional_optional_1_u32(value: Optional_optional_1_u32) ?u32 {
+    if (value.is_set == 0) return null;
+    return value.value;
+}
+
+pub inline fn fromOptional_optional_1_u32(value: ?u32) Optional_optional_1_u32 {
+    if (value) |item| {
+        return .{ .is_set = 1, .value = item };
+    }
+    return .{ .is_set = 0, .value = undefined };
+}
+
+pub const Optional_optional_5_UserKind = extern struct {
+    is_set: u8,
+    value: api.UserKind,
+};
+
+pub inline fn toOptional_optional_5_UserKind(value: Optional_optional_5_UserKind) ?api.UserKind {
+    if (value.is_set == 0) return null;
+    return value.value;
+}
+
+pub inline fn fromOptional_optional_5_UserKind(value: ?api.UserKind) Optional_optional_5_UserKind {
+    if (value) |item| {
+        return .{ .is_set = 1, .value = item };
+    }
+    return .{ .is_set = 0, .value = undefined };
+}
+
+pub const Optional_optional_arrayalias_Digest = extern struct {
+    is_set: u8,
+    value: api.Digest,
+};
+
+pub inline fn toOptional_optional_arrayalias_Digest(value: Optional_optional_arrayalias_Digest) ?api.Digest {
+    if (value.is_set == 0) return null;
+    return value.value;
+}
+
+pub inline fn fromOptional_optional_arrayalias_Digest(value: ?api.Digest) Optional_optional_arrayalias_Digest {
+    if (value) |item| {
+        return .{ .is_set = 1, .value = item };
+    }
+    return .{ .is_set = 0, .value = undefined };
+}

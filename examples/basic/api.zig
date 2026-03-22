@@ -92,3 +92,6 @@ pub extern fn duplicate_digest(seed: String) DigestList;
 pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 pub extern fn mirror_users(users: UserList) UserList;
 pub extern fn mirror_buckets(buckets: BucketList) BucketList;
+pub extern fn maybe_kind(flag: bool) ?UserKind;
+pub extern fn maybe_digest(flag: bool) ?Digest;
+pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;

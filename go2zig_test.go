@@ -104,6 +104,9 @@ pub extern fn duplicate_digest(seed: String) DigestList;
 pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 pub extern fn mirror_users(users: UserList) UserList;
 pub extern fn mirror_buckets(buckets: BucketList) BucketList;
+pub extern fn maybe_kind(flag: bool) ?UserKind;
+pub extern fn maybe_digest(flag: bool) ?Digest;
+pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
 `
 
 const integrationLib = `
@@ -228,6 +231,21 @@ pub fn mirror_buckets(buckets: api.BucketList) api.BucketList {
     }
     return rt.ownBucketList(out);
 }
+
+pub fn maybe_kind(flag: bool) ?api.UserKind {
+    if (!flag) return null;
+    return api.UserKind.admin;
+}
+
+pub fn maybe_digest(flag: bool) ?api.Digest {
+    if (!flag) return null;
+    return .{ 9, 8, 7, 6 };
+}
+
+pub fn choose_limit(flag: bool, value: ?u32) ?u32 {
+    if (!flag) return null;
+    return if (value) |item| item + 1 else 1;
+}
 `
 
 func TestGenerateWritesGoFile(t *testing.T) {
@@ -280,6 +298,9 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
 		"func (c *Go2ZigClient) MirrorUsers(users UserList) UserList",
 		"func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList",
+		"func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind",
+		"func (c *Go2ZigClient) MaybeDigest(flag bool) *Digest",
+		"func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -384,6 +405,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList") {
 		t.Fatalf("generated file missing slice-field-struct wrapper\n%s", string(content))
 	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind") {
+		t.Fatalf("generated file missing optional enum wrapper\n%s", string(content))
+	}
 }
 
 func TestBuilderGenerateOnly(t *testing.T) {
@@ -479,6 +503,12 @@ func main() {
 	metrics := MirrorMetrics(MetricList{{Kind: UserKindMember, Scores: [3]uint16{3, 5, 8}}, {Kind: UserKindAdmin, Scores: [3]uint16{13, 21, 34}}})
 	users := MirrorUsers(UserList{{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, {ID: 8, Kind: UserKindAdmin, Name: "bob", Email: "bob@example.com", Scores: [3]uint16{13, 21, 34}}})
 	buckets := MirrorBuckets(BucketList{{Kind: UserKindMember, Scores: ScoreList{2, 4, 6}}, {Kind: UserKindAdmin, Scores: ScoreList{3, 6, 9}}})
+	kind := MaybeKind(true)
+	noKind := MaybeKind(false)
+	digestPtr := MaybeDigest(true)
+	base := uint32(9)
+	limit := ChooseLimit(true, &base)
+	defaultLimit := ChooseLimit(true, nil)
 	checked, err := LoginChecked(LoginRequest{
 		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
@@ -493,7 +523,7 @@ func main() {
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], users[1].Name, buckets[1].Scores[2], checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%d|%d|%t|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], users[1].Name, buckets[1].Scores[2], *kind, noKind == nil, (*digestPtr)[1], *limit+*defaultLimit, checked.Message, err != nil)
 }
 `)
 
@@ -504,7 +534,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|9|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|9|2|true|8|11|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }
