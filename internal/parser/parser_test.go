@@ -37,10 +37,15 @@ pub const LoginResponse = extern struct {
     token: Bytes,
 };
 
+pub const LoginError = error{
+    InvalidPassword,
+};
+
 pub extern fn health() bool;
 pub export fn login(req: LoginRequest) LoginResponse {
     unreachable;
 }
+pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
 `
 
@@ -55,8 +60,8 @@ func TestParse(t *testing.T) {
 	if len(api.Structs) != 3 {
 		t.Fatalf("Parse() structs = %d, want 3", len(api.Structs))
 	}
-	if len(api.Funcs) != 3 {
-		t.Fatalf("Parse() funcs = %d, want 3", len(api.Funcs))
+	if len(api.Funcs) != 4 {
+		t.Fatalf("Parse() funcs = %d, want 4", len(api.Funcs))
 	}
 
 	if api.Struct("String") != nil || api.Struct("Bytes") != nil {
@@ -80,7 +85,13 @@ func TestParse(t *testing.T) {
 	if got := api.Funcs[1].Return.Name; got != "LoginResponse" {
 		t.Fatalf("login return = %q, want LoginResponse", got)
 	}
-	if got := api.Funcs[2].Params[1].Type.Kind; got != model.TypeString {
+	if !api.Funcs[2].CanErr {
+		t.Fatal("login_checked should be marked CanErr")
+	}
+	if got := api.Funcs[2].Return.Name; got != "LoginResponse" {
+		t.Fatalf("login_checked payload = %q, want LoginResponse", got)
+	}
+	if got := api.Funcs[3].Params[1].Type.Kind; got != model.TypeString {
 		t.Fatalf("rename_user second param kind = %v, want string", got)
 	}
 }

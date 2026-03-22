@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.15.2
+      - name: Run tests
+        run: go test ./...
+      - name: Run asm benchmarks
+        run: go test -bench . ./asmcall
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.15.2
+      - name: Run tests
+        run: go test ./...
+      - name: Cross-check linux amd64 build
+        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...

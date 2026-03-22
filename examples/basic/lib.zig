@@ -22,6 +22,15 @@ pub fn login(req: api.LoginRequest) api.LoginResponse {
     };
 }
 
+pub fn login_checked(req: api.LoginRequest) api.LoginError!api.LoginResponse {
+    if (rt.asSlice(req.password).len < 6) return api.LoginError.InvalidPassword;
+    return .{
+        .ok = true,
+        .message = rt.ownString("welcome alice"),
+        .token = rt.ownBytes("token-123"),
+    };
+}
+
 pub fn rename_user(user: api.User, next_name: api.String) api.User {
     return .{
         .id = user.id,

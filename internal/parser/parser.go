@@ -11,7 +11,7 @@ import (
 
 var (
 	structPattern = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{(.*?)\}\s*;`)
-	funcPattern   = regexp.MustCompile(`(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*([A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
+	funcPattern   = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*(.+?)\s*(?:;|\{)`)
 )
 
 func ParseFile(path string) (*model.API, error) {
@@ -59,13 +59,43 @@ func parseFunctions(content string) ([]*model.Function, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse function %q params: %w", match[1], err)
 		}
-		ret, err := parseType(strings.TrimSpace(match[3]))
+		ret, canErr, err := parseReturnType(strings.TrimSpace(match[3]))
 		if err != nil {
 			return nil, fmt.Errorf("parse function %q return: %w", match[1], err)
 		}
-		funcs = append(funcs, &model.Function{Name: match[1], Params: params, Return: ret})
+		funcs = append(funcs, &model.Function{Name: match[1], Params: params, Return: ret, CanErr: canErr})
 	}
 	return funcs, nil
+}
+
+func parseReturnType(raw string) (model.TypeRef, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return model.TypeRef{}, false, fmt.Errorf("return type is empty")
+	}
+	if strings.Contains(raw, "!") {
+		idx := strings.Index(raw, "!")
+		if idx < 0 {
+			return model.TypeRef{}, false, fmt.Errorf("error union payload is empty")
+		}
+		payload := strings.TrimSpace(raw[idx+1:])
+		if payload == "" {
+			return model.TypeRef{}, false, fmt.Errorf("error union payload is empty")
+		}
+		t, err := parseType(payload)
+		return t, true, err
+	}
+	idx := strings.LastIndex(raw, "!")
+	if idx < 0 {
+		t, err := parseType(raw)
+		return t, false, err
+	}
+	payload := strings.TrimSpace(raw[idx+1:])
+	if payload == "" {
+		return model.TypeRef{}, false, fmt.Errorf("error union payload is empty")
+	}
+	t, err := parseType(payload)
+	return t, true, err
 }
 
 func parseFields(body string) ([]model.Field, error) {

@@ -22,15 +22,17 @@ func TestRender(t *testing.T) {
             user: User,
             password: String,
         };
-        pub const LoginResponse = extern struct {
-            ok: bool,
-            message: String,
-            token: Bytes,
-        };
-        pub extern fn health() bool;
-        pub extern fn login(req: LoginRequest) LoginResponse;
-        pub extern fn rename_user(user: User, next_name: String) User;
-    `)
+		pub const LoginResponse = extern struct {
+			ok: bool,
+			message: String,
+			token: Bytes,
+		};
+		pub const LoginError = error{ InvalidPassword };
+		pub extern fn health() bool;
+		pub extern fn login(req: LoginRequest) LoginResponse;
+		pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
+		pub extern fn rename_user(user: User, next_name: String) User;
+	`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -49,8 +51,10 @@ func TestRender(t *testing.T) {
 		"func NewGo2ZigClient(path string) *Go2ZigClient",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
+		"func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)",
 		"func (c *Go2ZigClient) RenameUser(user User, nextName string) User",
 		"go2zig_call_login",
+		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
 		if !strings.Contains(content, check) {
@@ -65,6 +69,9 @@ func TestRender(t *testing.T) {
 	bridgeText := string(RenderZigBridge(api, Config{APIModule: "api.zig", ImplModule: "lib.zig"}))
 	if !strings.Contains(bridgeText, "pub export fn go2zig_call_login") {
 		t.Fatalf("RenderZigBridge() missing exported login bridge\n%s", bridgeText)
+	}
+	if !strings.Contains(bridgeText, "catch |err|") {
+		t.Fatalf("RenderZigBridge() missing error-union catch path\n%s", bridgeText)
 	}
 	if !strings.Contains(bridgeText, "pub export fn go2zig_free_buf") {
 		t.Fatalf("RenderZigBridge() missing free bridge\n%s", bridgeText)

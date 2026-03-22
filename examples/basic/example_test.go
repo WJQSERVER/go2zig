@@ -31,6 +31,30 @@ func TestExampleAPI(t *testing.T) {
 		t.Fatalf("Login() token = %q, want %q", string(resp.Token), "token-123")
 	}
 
+	checked, err := LoginChecked(LoginRequest{
+		User: User{
+			ID:    7,
+			Name:  "alice",
+			Email: "alice@example.com",
+		},
+		Password: "secret-123",
+	})
+	if err != nil {
+		t.Fatalf("LoginChecked() error = %v", err)
+	}
+	if !checked.OK {
+		t.Fatal("LoginChecked() returned not ok")
+	}
+	if checked.Message != "welcome alice" {
+		t.Fatalf("LoginChecked() message = %q, want %q", checked.Message, "welcome alice")
+	}
+	if _, err := LoginChecked(LoginRequest{
+		User:     User{ID: 7, Name: "alice", Email: "alice@example.com"},
+		Password: "bad",
+	}); err == nil {
+		t.Fatal("LoginChecked() error = nil, want error")
+	}
+
 	renamed := RenameUser(User{ID: 7, Name: "alice", Email: "alice@example.com"}, "ally")
 	if renamed.Name != "ally" {
 		t.Fatalf("RenameUser() name = %q, want %q", renamed.Name, "ally")

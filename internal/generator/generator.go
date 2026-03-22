@@ -126,6 +126,7 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 
 	body.WriteString("type _go2zigString struct {\n\tPtr unsafe.Pointer\n\tLen uintptr\n}\n\n")
 	body.WriteString("type _go2zigBytes struct {\n\tPtr unsafe.Pointer\n\tLen uintptr\n}\n\n")
+	body.WriteString("type _go2zigError struct {\n\tCode uint32\n\tText _go2zigString\n}\n\n")
 	body.WriteString("func _go2zigBool(v bool) uint8 {\n\tif v {\n\t\treturn 1\n\t}\n\treturn 0\n}\n\n")
 	body.WriteString("func _go2zigFromBool(v uint8) bool {\n\treturn v != 0\n}\n\n")
 	body.WriteString("func _go2zigRefString(value string) _go2zigString {\n")
@@ -148,6 +149,16 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	body.WriteString("\tret := append([]byte(nil), unsafe.Slice((*byte)(value.Ptr), int(value.Len))...)\n")
 	body.WriteString("\trt.free(value.Ptr, value.Len)\n")
 	body.WriteString("\treturn ret\n")
+	body.WriteString("}\n\n")
+	body.WriteString("func _go2zigOwnError(rt *_go2zigRuntime, value _go2zigError) error {\n")
+	body.WriteString("\tif value.Code == 0 {\n\t\treturn nil\n\t}\n")
+	body.WriteString("\treturn &Go2ZigError{Code: value.Code, Message: _go2zigOwnString(rt, value.Text)}\n")
+	body.WriteString("}\n\n")
+	body.WriteString("type Go2ZigError struct {\n\tCode uint32\n\tMessage string\n}\n\n")
+	body.WriteString("func (e *Go2ZigError) Error() string {\n")
+	body.WriteString("\tif e == nil {\n\t\treturn \"<nil>\"\n\t}\n")
+	body.WriteString("\tif e.Message != \"\" {\n\t\treturn e.Message\n\t}\n")
+	body.WriteString("\treturn fmt.Sprintf(\"zig error code %d\", e.Code)\n")
 	body.WriteString("}\n\n")
 
 	for _, item := range api.Structs {
@@ -186,6 +197,10 @@ func RenderZigRuntime(cfg Config) []byte {
 	body.WriteString("const api = @import(\"")
 	body.WriteString(escapeZigString(apiModule))
 	body.WriteString("\");\n\n")
+	body.WriteString("pub const ErrorInfo = extern struct {\n")
+	body.WriteString("    code: u32,\n")
+	body.WriteString("    text: api.String,\n")
+	body.WriteString("};\n\n")
 	body.WriteString("pub inline fn asSlice(value: api.String) []const u8 {\n")
 	body.WriteString("    if (value.len == 0) return \"\";\n")
 	body.WriteString("    return value.ptr[0..value.len];\n")
@@ -210,6 +225,16 @@ func RenderZigRuntime(cfg Config) []byte {
 	body.WriteString("    if (len == 0 or ptr == null) return;\n")
 	body.WriteString("    const buf = @as([*]u8, @ptrCast(ptr.?))[0..len];\n")
 	body.WriteString("    std.heap.smp_allocator.free(buf);\n")
+	body.WriteString("}\n")
+	body.WriteString("\n")
+	body.WriteString("pub fn okError() ErrorInfo {\n")
+	body.WriteString("    return .{ .code = 0, .text = .{ .ptr = undefined, .len = 0 } };\n")
+	body.WriteString("}\n\n")
+	body.WriteString("pub fn makeError(err: anyerror) ErrorInfo {\n")
+	body.WriteString("    return .{\n")
+	body.WriteString("        .code = @intFromError(err),\n")
+	body.WriteString("        .text = ownString(@errorName(err)),\n")
+	body.WriteString("    };\n")
 	body.WriteString("}\n")
 	return []byte(body.String())
 }
@@ -253,23 +278,44 @@ func RenderZigBridge(api *model.API, cfg Config) []byte {
 		body.WriteString("(frame: *")
 		body.WriteString(zigFrameName(fn))
 		body.WriteString(") void {\n")
-		if fn.Return.Kind != model.TypeVoid {
-			body.WriteString("    frame.out = impl.")
+		if fn.CanErr {
+			body.WriteString("    frame.err = rt.okError();\n")
+			body.WriteString("    const result = impl.")
 			body.WriteString(fn.Name)
 			body.WriteString("(")
-		} else {
-			body.WriteString("    impl.")
-			body.WriteString(fn.Name)
-			body.WriteString("(")
-		}
-		for i, param := range fn.Params {
-			if i > 0 {
-				body.WriteString(", ")
+			for i, param := range fn.Params {
+				if i > 0 {
+					body.WriteString(", ")
+				}
+				body.WriteString("frame.")
+				body.WriteString(param.Name)
 			}
-			body.WriteString("frame.")
-			body.WriteString(param.Name)
+			body.WriteString(") catch |err| {\n")
+			body.WriteString("        frame.err = rt.makeError(err);\n")
+			body.WriteString("        return;\n")
+			body.WriteString("    };\n")
+			if fn.Return.Kind != model.TypeVoid {
+				body.WriteString("    frame.out = result;\n")
+			}
+		} else {
+			if fn.Return.Kind != model.TypeVoid {
+				body.WriteString("    frame.out = impl.")
+				body.WriteString(fn.Name)
+				body.WriteString("(")
+			} else {
+				body.WriteString("    impl.")
+				body.WriteString(fn.Name)
+				body.WriteString("(")
+			}
+			for i, param := range fn.Params {
+				if i > 0 {
+					body.WriteString(", ")
+				}
+				body.WriteString("frame.")
+				body.WriteString(param.Name)
+			}
+			body.WriteString(");\n")
 		}
-		body.WriteString(");\n")
 		body.WriteString("}\n\n")
 	}
 	return []byte(body.String())
@@ -311,6 +357,9 @@ func frameFields(fn *model.Function) []zigField {
 	}
 	if fn.Return.Kind != model.TypeVoid {
 		fields = append(fields, zigField{name: "out", typ: zigType(fn.Return)})
+	}
+	if fn.CanErr {
+		fields = append(fields, zigField{name: "err", typ: "rt.ErrorInfo"})
 	}
 	if len(fields) == 0 {
 		fields = append(fields, zigField{name: "reserved", typ: "usize"})
@@ -430,7 +479,15 @@ func renderMethod(fn *model.Function) string {
 		b.WriteString(goType(param.Type))
 	}
 	b.WriteString(")")
-	if fn.Return.Kind != model.TypeVoid {
+	if fn.CanErr {
+		if fn.Return.Kind != model.TypeVoid {
+			b.WriteString(" (")
+			b.WriteString(goType(fn.Return))
+			b.WriteString(", error)")
+		} else {
+			b.WriteString(" error")
+		}
+	} else if fn.Return.Kind != model.TypeVoid {
 		b.WriteString(" ")
 		b.WriteString(goType(fn.Return))
 	}
@@ -453,10 +510,26 @@ func renderMethod(fn *model.Function) string {
 		b.WriteString(goParamName(param.Name))
 		b.WriteString(")\n")
 	}
+	if fn.CanErr {
+		b.WriteString("\tif err := _go2zigOwnError(c.rt, frame.err); err != nil {\n")
+		if fn.Return.Kind != model.TypeVoid {
+			b.WriteString("\t\tvar zero ")
+			b.WriteString(goType(fn.Return))
+			b.WriteString("\n\t\treturn zero, err\n")
+		} else {
+			b.WriteString("\t\treturn err\n")
+		}
+		b.WriteString("\t}\n")
+	}
 	if fn.Return.Kind != model.TypeVoid {
 		b.WriteString("\treturn ")
 		b.WriteString(ownExprRT("c.rt", fn.Return, "frame.out"))
+		if fn.CanErr {
+			b.WriteString(", nil")
+		}
 		b.WriteString("\n")
+	} else if fn.CanErr {
+		b.WriteString("\treturn nil\n")
 	}
 	b.WriteString("}\n")
 	return b.String()
@@ -477,12 +550,20 @@ func renderTopLevel(fn *model.Function) string {
 		b.WriteString(goType(param.Type))
 	}
 	b.WriteString(")")
-	if fn.Return.Kind != model.TypeVoid {
+	if fn.CanErr {
+		if fn.Return.Kind != model.TypeVoid {
+			b.WriteString(" (")
+			b.WriteString(goType(fn.Return))
+			b.WriteString(", error)")
+		} else {
+			b.WriteString(" error")
+		}
+	} else if fn.Return.Kind != model.TypeVoid {
 		b.WriteString(" ")
 		b.WriteString(goType(fn.Return))
 	}
 	b.WriteString(" {\n\t")
-	if fn.Return.Kind != model.TypeVoid {
+	if fn.Return.Kind != model.TypeVoid || fn.CanErr {
 		b.WriteString("return ")
 	}
 	b.WriteString("Default.")
@@ -544,6 +625,8 @@ func goType(t model.TypeRef) string {
 		return "[]byte"
 	case model.TypeStruct:
 		return t.Name
+	case model.TypeVoid:
+		return "struct{}"
 	default:
 		return ""
 	}
@@ -596,6 +679,8 @@ func goFrameFieldType(zigType string) string {
 		return "_go2zigString"
 	case "api.Bytes":
 		return "_go2zigBytes"
+	case "rt.ErrorInfo":
+		return "_go2zigError"
 	case "usize":
 		return "uintptr"
 	default:

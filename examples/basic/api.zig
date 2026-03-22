@@ -25,6 +25,11 @@ pub const LoginResponse = extern struct {
     token: Bytes,
 };
 
+pub const LoginError = error{
+    InvalidPassword,
+};
+
 pub extern fn health() bool;
 pub extern fn login(req: LoginRequest) LoginResponse;
+pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;

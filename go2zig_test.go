@@ -37,9 +37,14 @@ pub const LoginResponse = extern struct {
     token: Bytes,
 };
 
+pub const LoginError = error{
+    InvalidPassword,
+};
+
 pub extern fn health() bool;
 pub extern fn login(req: LoginRequest) LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
+pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 `
 
 const integrationLib = `
@@ -65,6 +70,15 @@ pub fn rename_user(user: api.User, next_name: api.String) api.User {
         .id = user.id,
         .name = rt.ownString(rt.asSlice(next_name)),
         .email = rt.ownString(rt.asSlice(user.email)),
+    };
+}
+
+pub fn login_checked(req: api.LoginRequest) api.LoginError!api.LoginResponse {
+    if (rt.asSlice(req.password).len < 6) return api.LoginError.InvalidPassword;
+    return .{
+        .ok = true,
+        .message = rt.ownString("welcome alice"),
+        .token = rt.ownBytes("token-123"),
     };
 }
 `
@@ -102,6 +116,8 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"var Default = NewGo2ZigClient(\"\")",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
+		"func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)",
+		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
 		if !strings.Contains(text, check) {
@@ -122,6 +138,9 @@ func TestGenerateWritesGoFile(t *testing.T) {
 	}
 	if !strings.Contains(string(bridgeText), "pub export fn go2zig_call_login") {
 		t.Fatalf("bridge zig missing login export\n%s", bridgeText)
+	}
+	if !strings.Contains(string(bridgeText), "catch |err|") {
+		t.Fatalf("bridge zig should include error union catch path\n%s", bridgeText)
 	}
 }
 
@@ -166,6 +185,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) RenameUser(user User, nextName string) User") {
 		t.Fatalf("generated file missing ergonomic RenameUser wrapper\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)") {
+		t.Fatalf("generated file missing error-return wrapper\n%s", string(content))
 	}
 }
 
@@ -212,7 +234,21 @@ func main() {
 		panic("login failed")
 	}
 	renamed := RenameUser(User{ID: 7, Name: "alice", Email: "alice@example.com"}, "ally")
-	fmt.Printf("%s|%s|%s", resp.Message, string(resp.Token), renamed.Name)
+	checked, err := LoginChecked(LoginRequest{
+		User: User{ID: 7, Name: "alice", Email: "alice@example.com"},
+		Password: "secret-123",
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, err = LoginChecked(LoginRequest{
+		User: User{ID: 7, Name: "alice", Email: "alice@example.com"},
+		Password: "bad",
+	})
+	if err == nil {
+		panic("expected login_checked error")
+	}
+	fmt.Printf("%s|%s|%s|%s|%v", resp.Message, string(resp.Token), renamed.Name, checked.Message, err != nil)
 }
 `)
 
@@ -223,7 +259,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }
