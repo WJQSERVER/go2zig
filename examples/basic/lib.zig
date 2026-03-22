@@ -65,10 +65,27 @@ pub fn digest_name(name: api.String) [4]u8 {
 
 pub fn scale_scores(scores: api.ScoreList, factor: u16) api.ScoreList {
     const items = rt.asScoreList(scores);
-    var out = std.heap.page_allocator.alloc(u16, items.len) catch @panic("alloc failed");
+    const out = std.heap.page_allocator.alloc(u16, items.len) catch @panic("alloc failed");
     defer std.heap.page_allocator.free(out);
     for (items, 0..) |value, i| {
         out[i] = value * factor;
     }
     return rt.ownScoreList(out);
+}
+
+pub fn mirror_kind_history(history: api.UserKindList) api.UserKindList {
+    const items = rt.asUserKindList(history);
+    const out = std.heap.page_allocator.alloc(api.UserKind, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    @memcpy(out, items);
+    return rt.ownUserKindList(out);
+}
+
+pub fn duplicate_digest(seed: api.String) api.DigestList {
+    const digest = digest_name(seed);
+    const out = std.heap.page_allocator.alloc([4]u8, 2) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    out[0] = digest;
+    out[1] = .{ digest[0], digest[1] + 1, digest[2], digest[3] };
+    return rt.ownDigestList(out);
 }

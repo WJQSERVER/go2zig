@@ -90,4 +90,14 @@ func TestExampleAPI(t *testing.T) {
 	if len(scaled) != 3 || scaled[0] != 6 || scaled[2] != 18 {
 		t.Fatalf("ScaleScores() result = %v, want [6 12 18]", scaled)
 	}
+
+	history := MirrorKindHistory(UserKindList{UserKindGuest, UserKindAdmin})
+	if len(history) != 2 || history[0] != UserKindGuest || history[1] != UserKindAdmin {
+		t.Fatalf("MirrorKindHistory() result = %v, want [guest admin]", history)
+	}
+
+	duplicates := DuplicateDigest("alice")
+	if len(duplicates) != 2 || duplicates[0] != [4]uint8{'a', 5, 0xAB, 0xCD} || duplicates[1][1] != 6 {
+		t.Fatalf("DuplicateDigest() result = %v, want two digests", duplicates)
+	}
 }

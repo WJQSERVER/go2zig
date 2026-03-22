@@ -13,6 +13,16 @@ pub const ScoreList = extern struct {
     len: usize,
 };
 
+pub const UserKindList = extern struct {
+    ptr: ?[*]const UserKind,
+    len: usize,
+};
+
+pub const DigestList = extern struct {
+    ptr: ?[*]const [4]u8,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -50,3 +60,5 @@ pub extern fn rename_user(user: User, next_name: String) User;
 pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
 pub extern fn digest_name(name: String) [4]u8;
 pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
+pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
+pub extern fn duplicate_digest(seed: String) DigestList;

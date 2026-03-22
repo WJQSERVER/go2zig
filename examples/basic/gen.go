@@ -25,18 +25,20 @@ func NewGo2ZigClient(path string) *Go2ZigClient {
 var Default = NewGo2ZigClient("")
 
 type _go2zigRuntime struct {
-	path             string
-	once             sync.Once
-	lib              *dynlib.Library
-	freeBuf          uintptr
-	procHealth       uintptr
-	procLogin        uintptr
-	procLoginChecked uintptr
-	procRenameUser   uintptr
-	procPromoteUser  uintptr
-	procDigestName   uintptr
-	procScaleScores  uintptr
-	err              error
+	path                  string
+	once                  sync.Once
+	lib                   *dynlib.Library
+	freeBuf               uintptr
+	procHealth            uintptr
+	procLogin             uintptr
+	procLoginChecked      uintptr
+	procRenameUser        uintptr
+	procPromoteUser       uintptr
+	procDigestName        uintptr
+	procScaleScores       uintptr
+	procMirrorKindHistory uintptr
+	procDuplicateDigest   uintptr
+	err                   error
 }
 
 func (rt *_go2zigRuntime) Load() error {
@@ -81,6 +83,14 @@ func (rt *_go2zigRuntime) Load() error {
 		}
 		if rt.procScaleScores, err = lib.Lookup("go2zig_call_scale_scores"); err != nil {
 			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_scale_scores: %w", err)
+			return
+		}
+		if rt.procMirrorKindHistory, err = lib.Lookup("go2zig_call_mirror_kind_history"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_kind_history: %w", err)
+			return
+		}
+		if rt.procDuplicateDigest, err = lib.Lookup("go2zig_call_duplicate_digest"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_duplicate_digest: %w", err)
 			return
 		}
 	})
@@ -235,8 +245,66 @@ func _go2zigOwnScoreList(rt *_go2zigRuntime, value _go2zigScoreList) ScoreList {
 	if value.ptr == nil || value.len == 0 {
 		return nil
 	}
-	ret := append(ScoreList(nil), unsafe.Slice((*uint16)(value.ptr), int(value.len))...)
+	src := unsafe.Slice((*uint16)(value.ptr), int(value.len))
+	ret := make(ScoreList, len(src))
+	for i := range src {
+		ret[i] = uint16(src[i])
+	}
 	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(uint16(0))))
+	return ret
+}
+
+type UserKindList []UserKind
+
+type _go2zigUserKindList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+func _go2zigRefUserKindList(value UserKindList) _go2zigUserKindList {
+	if len(value) == 0 {
+		return _go2zigUserKindList{}
+	}
+	return _go2zigUserKindList{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}
+}
+
+func _go2zigOwnUserKindList(rt *_go2zigRuntime, value _go2zigUserKindList) UserKindList {
+	if value.ptr == nil || value.len == 0 {
+		return nil
+	}
+	src := unsafe.Slice((*uint8)(value.ptr), int(value.len))
+	ret := make(UserKindList, len(src))
+	for i := range src {
+		ret[i] = UserKind(src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(uint8(0))))
+	return ret
+}
+
+type DigestList [][4]uint8
+
+type _go2zigDigestList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+func _go2zigRefDigestList(value DigestList) _go2zigDigestList {
+	if len(value) == 0 {
+		return _go2zigDigestList{}
+	}
+	return _go2zigDigestList{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}
+}
+
+func _go2zigOwnDigestList(rt *_go2zigRuntime, value _go2zigDigestList) DigestList {
+	if value.ptr == nil || value.len == 0 {
+		return nil
+	}
+	src := unsafe.Slice((*[4]uint8)(value.ptr), int(value.len))
+	ret := make(DigestList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnArray_array_4_1_u8(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof([4]uint8{})))
 	return ret
 }
 
@@ -403,6 +471,16 @@ type _go2zigCallScaleScores struct {
 	out    _go2zigScoreList
 }
 
+type _go2zigCallMirrorKindHistory struct {
+	history _go2zigUserKindList
+	out     _go2zigUserKindList
+}
+
+type _go2zigCallDuplicateDigest struct {
+	seed _go2zigString
+	out  _go2zigDigestList
+}
+
 func (c *Go2ZigClient) Health() bool {
 	var frame _go2zigCallHealth
 	c.rt.call(c.rt.procHealth, unsafe.Pointer(&frame))
@@ -495,4 +573,28 @@ func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList {
 
 func ScaleScores(scores ScoreList, factor uint16) ScoreList {
 	return Default.ScaleScores(scores, factor)
+}
+
+func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList {
+	var frame _go2zigCallMirrorKindHistory
+	frame.history = _go2zigRefUserKindList(history)
+	c.rt.call(c.rt.procMirrorKindHistory, unsafe.Pointer(&frame))
+	runtime.KeepAlive(history)
+	return _go2zigOwnUserKindList(c.rt, frame.out)
+}
+
+func MirrorKindHistory(history UserKindList) UserKindList {
+	return Default.MirrorKindHistory(history)
+}
+
+func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList {
+	var frame _go2zigCallDuplicateDigest
+	frame.seed = _go2zigRefString(seed)
+	c.rt.call(c.rt.procDuplicateDigest, unsafe.Pointer(&frame))
+	runtime.KeepAlive(seed)
+	return _go2zigOwnDigestList(c.rt, frame.out)
+}
+
+func DuplicateDigest(seed string) DigestList {
+	return Default.DuplicateDigest(seed)
 }

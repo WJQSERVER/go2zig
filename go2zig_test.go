@@ -25,6 +25,16 @@ pub const ScoreList = extern struct {
     len: usize,
 };
 
+pub const UserKindList = extern struct {
+    ptr: ?[*]const UserKind,
+    len: usize,
+};
+
+pub const DigestList = extern struct {
+    ptr: ?[*]const [4]u8,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -62,6 +72,8 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
 pub extern fn digest_name(name: String) [4]u8;
 pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
+pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
+pub extern fn duplicate_digest(seed: String) DigestList;
 `
 
 const integrationLib = `
@@ -132,6 +144,23 @@ pub fn scale_scores(scores: api.ScoreList, factor: u16) api.ScoreList {
     }
     return rt.ownScoreList(out);
 }
+
+pub fn mirror_kind_history(history: api.UserKindList) api.UserKindList {
+    const items = rt.asUserKindList(history);
+    const out = std.heap.page_allocator.alloc(api.UserKind, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    @memcpy(out, items);
+    return rt.ownUserKindList(out);
+}
+
+pub fn duplicate_digest(seed: api.String) api.DigestList {
+    const digest = digest_name(seed);
+    const out = std.heap.page_allocator.alloc([4]u8, 2) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    out[0] = digest;
+    out[1] = .{ digest[0], digest[1] + 1, digest[2], digest[3] };
+    return rt.ownDigestList(out);
+}
 `
 
 func TestGenerateWritesGoFile(t *testing.T) {
@@ -166,6 +195,8 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"type Go2ZigClient struct",
 		"type UserKind uint8",
 		"type ScoreList []uint16",
+		"type UserKindList []UserKind",
+		"type DigestList [][4]uint8",
 		"var Default = NewGo2ZigClient(\"\")",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
@@ -173,6 +204,8 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User",
 		"func (c *Go2ZigClient) DigestName(name string) [4]uint8",
 		"func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList",
+		"func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList",
+		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -261,6 +294,12 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList") {
 		t.Fatalf("generated file missing slice wrapper\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList") {
+		t.Fatalf("generated file missing enum-slice wrapper\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList") {
+		t.Fatalf("generated file missing array-slice wrapper\n%s", string(content))
 	}
 }
 
@@ -352,6 +391,8 @@ func main() {
 	promoted := PromoteUser(User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, UserKindAdmin, [3]uint16{13, 21, 34})
 	digest := DigestName("alice")
 	scaled := ScaleScores(ScoreList{2, 4, 6}, 3)
+	history := MirrorKindHistory(UserKindList{UserKindGuest, UserKindAdmin})
+	duplicates := DuplicateDigest("alice")
 	checked, err := LoginChecked(LoginRequest{
 		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
@@ -366,7 +407,7 @@ func main() {
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], checked.Message, err != nil)
 }
 `)
 
@@ -377,7 +418,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }

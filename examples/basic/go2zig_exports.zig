@@ -79,3 +79,21 @@ pub export fn go2zig_call_scale_scores(frame: *Go2ZigCallScaleScores) void {
     frame.out = impl.scale_scores(frame.scores, frame.factor);
 }
 
+pub const Go2ZigCallMirrorKindHistory = extern struct {
+    history: api.UserKindList,
+    out: api.UserKindList,
+};
+
+pub export fn go2zig_call_mirror_kind_history(frame: *Go2ZigCallMirrorKindHistory) void {
+    frame.out = impl.mirror_kind_history(frame.history);
+}
+
+pub const Go2ZigCallDuplicateDigest = extern struct {
+    seed: api.String,
+    out: api.DigestList,
+};
+
+pub export fn go2zig_call_duplicate_digest(frame: *Go2ZigCallDuplicateDigest) void {
+    frame.out = impl.duplicate_digest(frame.seed);
+}
+

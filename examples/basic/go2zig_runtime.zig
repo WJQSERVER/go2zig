@@ -59,3 +59,27 @@ pub fn ownScoreList(value: []const u16) api.ScoreList {
     @memcpy(buf, value);
     return .{ .ptr = buf.ptr, .len = buf.len };
 }
+
+pub inline fn asUserKindList(value: api.UserKindList) []const api.UserKind {
+    if (value.ptr == null or value.len == 0) return &.{};
+    return value.ptr.?[0..value.len];
+}
+
+pub fn ownUserKindList(value: []const api.UserKind) api.UserKindList {
+    if (value.len == 0) return .{ .ptr = null, .len = 0 };
+    const buf = std.heap.smp_allocator.alloc(api.UserKind, value.len) catch @panic("go2zig: alloc slice failed");
+    @memcpy(buf, value);
+    return .{ .ptr = buf.ptr, .len = buf.len };
+}
+
+pub inline fn asDigestList(value: api.DigestList) []const [4]u8 {
+    if (value.ptr == null or value.len == 0) return &.{};
+    return value.ptr.?[0..value.len];
+}
+
+pub fn ownDigestList(value: []const [4]u8) api.DigestList {
+    if (value.len == 0) return .{ .ptr = null, .len = 0 };
+    const buf = std.heap.smp_allocator.alloc([4]u8, value.len) catch @panic("go2zig: alloc slice failed");
+    @memcpy(buf, value);
+    return .{ .ptr = buf.ptr, .len = buf.len };
+}

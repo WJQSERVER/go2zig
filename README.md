@@ -54,6 +54,7 @@ pub extern fn rename_user(user: User, next_name: String) User;
 - 特殊类型：`String` `Bytes`
 - `extern struct` 组合和嵌套
 - POD 切片别名，例如 `extern struct { ptr: ?[*]const u16, len: usize }`
+- POD 切片元素可为基础类型、整型枚举、固定长度数组
 - 固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]MyEnum`
 - `pub extern fn` / `pub export fn` 风格函数签名解析
 - `[*]const u8` 与 `?[*]const u8` 这类 Zig 指针形式的 `String`/`Bytes` 别名

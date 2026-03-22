@@ -62,6 +62,12 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 - POD 切片别名，例如 `extern struct { ptr: ?[*]const u16, len: usize }`
 - 固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]UserKind`
 
+当前 POD 切片支持的元素类型：
+
+- 基础数值类型
+- 整型底层枚举
+- 固定长度数组
+
 数组桥接当前走逐元素转换 helper，这样可以：
 
 - 保持 ABI 规则明确
