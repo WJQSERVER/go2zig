@@ -28,6 +28,11 @@ pub const MetricList = extern struct {
     len: usize,
 };
 
+pub const UserList = extern struct {
+    ptr: ?[*]const User,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -73,3 +78,4 @@ pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
 pub extern fn mirror_metrics(metrics: MetricList) MetricList;
+pub extern fn mirror_users(users: UserList) UserList;

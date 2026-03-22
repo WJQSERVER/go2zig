@@ -105,4 +105,9 @@ func TestExampleAPI(t *testing.T) {
 	if len(metrics) != 2 || metrics[0].Kind != UserKindMember || metrics[1].Scores[0] != 13 {
 		t.Fatalf("MirrorMetrics() result = %v, want mirrored metrics", metrics)
 	}
+
+	users := MirrorUsers(UserList{{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, {ID: 8, Kind: UserKindAdmin, Name: "bob", Email: "bob@example.com", Scores: [3]uint16{13, 21, 34}}})
+	if len(users) != 2 || users[0].Name != "alice" || users[1].Email != "bob@example.com" {
+		t.Fatalf("MirrorUsers() result = %v, want mirrored users", users)
+	}
 }

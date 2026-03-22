@@ -39,6 +39,7 @@ type _go2zigRuntime struct {
 	procMirrorKindHistory uintptr
 	procDuplicateDigest   uintptr
 	procMirrorMetrics     uintptr
+	procMirrorUsers       uintptr
 	err                   error
 }
 
@@ -96,6 +97,10 @@ func (rt *_go2zigRuntime) Load() error {
 		}
 		if rt.procMirrorMetrics, err = lib.Lookup("go2zig_call_mirror_metrics"); err != nil {
 			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_metrics: %w", err)
+			return
+		}
+		if rt.procMirrorUsers, err = lib.Lookup("go2zig_call_mirror_users"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_users: %w", err)
 			return
 		}
 	})
@@ -370,6 +375,42 @@ func _go2zigOwnMetricList(rt *_go2zigRuntime, value _go2zigMetricList) MetricLis
 	return ret
 }
 
+type UserList []User
+
+type _go2zigUserList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefUserListResult struct {
+	slice _go2zigUserList
+	keep  []any
+}
+
+func _go2zigRefUserList(value UserList) _go2zigRefUserListResult {
+	if len(value) == 0 {
+		return _go2zigRefUserListResult{}
+	}
+	buf := make([]_go2zigUser, len(value))
+	for i := range value {
+		buf[i] = _go2zigRefUser(value[i])
+	}
+	return _go2zigRefUserListResult{slice: _go2zigUserList{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: []any{buf}}
+}
+
+func _go2zigOwnUserList(rt *_go2zigRuntime, value _go2zigUserList) UserList {
+	if value.ptr == nil || value.len == 0 {
+		return nil
+	}
+	src := unsafe.Slice((*_go2zigUser)(value.ptr), int(value.len))
+	ret := make(UserList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnUser(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(_go2zigUser{})))
+	return ret
+}
+
 func _go2zigRefArray_array_3_1_u16(value [3]uint16) [3]uint16 {
 	var out [3]uint16
 	for i := range value {
@@ -572,6 +613,11 @@ type _go2zigCallMirrorMetrics struct {
 	out     _go2zigMetricList
 }
 
+type _go2zigCallMirrorUsers struct {
+	users _go2zigUserList
+	out   _go2zigUserList
+}
+
 func (c *Go2ZigClient) Health() bool {
 	var frame _go2zigCallHealth
 	c.rt.call(c.rt.procHealth, unsafe.Pointer(&frame))
@@ -706,4 +752,18 @@ func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList {
 
 func MirrorMetrics(metrics MetricList) MetricList {
 	return Default.MirrorMetrics(metrics)
+}
+
+func (c *Go2ZigClient) MirrorUsers(users UserList) UserList {
+	var frame _go2zigCallMirrorUsers
+	_keepUsers := _go2zigRefUserList(users)
+	frame.users = _keepUsers.slice
+	c.rt.call(c.rt.procMirrorUsers, unsafe.Pointer(&frame))
+	runtime.KeepAlive(users)
+	_go2zigKeep(_keepUsers.keep)
+	return _go2zigOwnUserList(c.rt, frame.out)
+}
+
+func MirrorUsers(users UserList) UserList {
+	return Default.MirrorUsers(users)
 }

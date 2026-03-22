@@ -40,6 +40,11 @@ pub const MetricList = extern struct {
     len: usize,
 };
 
+pub const UserList = extern struct {
+    ptr: ?[*]const User,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -85,6 +90,7 @@ pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
 pub extern fn mirror_metrics(metrics: MetricList) MetricList;
+pub extern fn mirror_users(users: UserList) UserList;
 `
 
 const integrationLib = `
@@ -180,6 +186,22 @@ pub fn mirror_metrics(metrics: api.MetricList) api.MetricList {
     @memcpy(out, items);
     return rt.ownMetricList(out);
 }
+
+pub fn mirror_users(users: api.UserList) api.UserList {
+    const items = rt.asUserList(users);
+    const out = std.heap.page_allocator.alloc(api.User, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |user, i| {
+        out[i] = .{
+            .id = user.id,
+            .kind = user.kind,
+            .name = rt.ownString(rt.asSlice(user.name)),
+            .email = rt.ownString(rt.asSlice(user.email)),
+            .scores = user.scores,
+        };
+    }
+    return rt.ownUserList(out);
+}
 `
 
 func TestGenerateWritesGoFile(t *testing.T) {
@@ -217,6 +239,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"type UserKindList []UserKind",
 		"type DigestList [][4]uint8",
 		"type MetricList []Metric",
+		"type UserList []User",
 		"var Default = NewGo2ZigClient(\"\")",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
@@ -227,6 +250,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList",
 		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
 		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
+		"func (c *Go2ZigClient) MirrorUsers(users UserList) UserList",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -325,6 +349,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList") {
 		t.Fatalf("generated file missing struct-slice wrapper\n%s", string(content))
 	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorUsers(users UserList) UserList") {
+		t.Fatalf("generated file missing dynamic-struct-slice wrapper\n%s", string(content))
+	}
 }
 
 func TestBuilderGenerateOnly(t *testing.T) {
@@ -418,6 +445,7 @@ func main() {
 	history := MirrorKindHistory(UserKindList{UserKindGuest, UserKindAdmin})
 	duplicates := DuplicateDigest("alice")
 	metrics := MirrorMetrics(MetricList{{Kind: UserKindMember, Scores: [3]uint16{3, 5, 8}}, {Kind: UserKindAdmin, Scores: [3]uint16{13, 21, 34}}})
+	users := MirrorUsers(UserList{{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, {ID: 8, Kind: UserKindAdmin, Name: "bob", Email: "bob@example.com", Scores: [3]uint16{13, 21, 34}}})
 	checked, err := LoginChecked(LoginRequest{
 		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
@@ -432,7 +460,7 @@ func main() {
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], users[1].Name, checked.Message, err != nil)
 }
 `)
 
@@ -443,7 +471,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }

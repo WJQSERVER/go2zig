@@ -17,6 +17,7 @@ func TestRender(t *testing.T) {
 		pub const UserKindList = extern struct { ptr: ?[*]const UserKind, len: usize, };
 		pub const DigestList = extern struct { ptr: ?[*]const [4]u8, len: usize, };
 		pub const MetricList = extern struct { ptr: ?[*]const Metric, len: usize, };
+		pub const UserList = extern struct { ptr: ?[*]const User, len: usize, };
 		pub const UserKind = enum(u8) { guest, member, admin };
         pub const User = extern struct {
             id: u64,
@@ -50,6 +51,7 @@ func TestRender(t *testing.T) {
 		pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 		pub extern fn duplicate_digest(seed: String) DigestList;
 		pub extern fn mirror_metrics(metrics: MetricList) MetricList;
+		pub extern fn mirror_users(users: UserList) UserList;
 	`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -71,6 +73,7 @@ func TestRender(t *testing.T) {
 		"type UserKindList []UserKind",
 		"type DigestList [][4]uint8",
 		"type MetricList []Metric",
+		"type UserList []User",
 		"UserKindAdmin",
 		"func NewGo2ZigClient(path string) *Go2ZigClient",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
@@ -83,7 +86,9 @@ func TestRender(t *testing.T) {
 		"func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList",
 		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
 		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
+		"func (c *Go2ZigClient) MirrorUsers(users UserList) UserList",
 		"func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult",
+		"func _go2zigRefUserList(value UserList) _go2zigRefUserListResult",
 		"func _go2zigRefScoreList(value ScoreList) _go2zigRefScoreListResult",
 		"func _go2zigRefArray_",
 		"go2zig_call_login",

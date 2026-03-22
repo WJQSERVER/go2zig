@@ -97,3 +97,19 @@ pub fn mirror_metrics(metrics: api.MetricList) api.MetricList {
     @memcpy(out, items);
     return rt.ownMetricList(out);
 }
+
+pub fn mirror_users(users: api.UserList) api.UserList {
+    const items = rt.asUserList(users);
+    const out = std.heap.page_allocator.alloc(api.User, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |user, i| {
+        out[i] = .{
+            .id = user.id,
+            .kind = user.kind,
+            .name = rt.ownString(rt.asSlice(user.name)),
+            .email = rt.ownString(rt.asSlice(user.email)),
+            .scores = user.scores,
+        };
+    }
+    return rt.ownUserList(out);
+}

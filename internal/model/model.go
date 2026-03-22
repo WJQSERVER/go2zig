@@ -158,7 +158,7 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, funcs []*Function) (
 		if err := api.resolveType(&item.Elem, "slice "+item.Name); err != nil {
 			return nil, err
 		}
-		if !api.IsPOD(item.Elem) {
+		if !api.SupportsSliceElem(item.Elem) {
 			return nil, fmt.Errorf("slice %q uses unsupported element type %q", item.Name, item.Elem.TypeName())
 		}
 	}
@@ -429,6 +429,31 @@ func (a *API) IsPOD(t TypeRef) bool {
 		}
 		for _, field := range item.Fields {
 			if !a.IsPOD(field.Type) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *API) SupportsSliceElem(t TypeRef) bool {
+	switch t.Kind {
+	case TypePrimitive, TypeEnum, TypeString, TypeBytes:
+		return true
+	case TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return a.SupportsSliceElem(*t.Elem)
+	case TypeStruct:
+		item := a.Struct(t.Name)
+		if item == nil {
+			return false
+		}
+		for _, field := range item.Fields {
+			if field.Type.Kind == TypeSlice || !a.SupportsSliceElem(field.Type) {
 				return false
 			}
 		}

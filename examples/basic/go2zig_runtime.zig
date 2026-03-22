@@ -95,3 +95,15 @@ pub fn ownMetricList(value: []const api.Metric) api.MetricList {
     @memcpy(buf, value);
     return .{ .ptr = buf.ptr, .len = buf.len };
 }
+
+pub inline fn asUserList(value: api.UserList) []const api.User {
+    if (value.ptr == null or value.len == 0) return &.{};
+    return value.ptr.?[0..value.len];
+}
+
+pub fn ownUserList(value: []const api.User) api.UserList {
+    if (value.len == 0) return .{ .ptr = null, .len = 0 };
+    const buf = std.heap.smp_allocator.alloc(api.User, value.len) catch @panic("go2zig: alloc slice failed");
+    @memcpy(buf, value);
+    return .{ .ptr = buf.ptr, .len = buf.len };
+}

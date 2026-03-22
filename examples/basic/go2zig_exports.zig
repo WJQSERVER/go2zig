@@ -106,3 +106,12 @@ pub export fn go2zig_call_mirror_metrics(frame: *Go2ZigCallMirrorMetrics) void {
     frame.out = impl.mirror_metrics(frame.metrics);
 }
 
+pub const Go2ZigCallMirrorUsers = extern struct {
+    users: api.UserList,
+    out: api.UserList,
+};
+
+pub export fn go2zig_call_mirror_users(frame: *Go2ZigCallMirrorUsers) void {
+    frame.out = impl.mirror_users(frame.users);
+}
+
