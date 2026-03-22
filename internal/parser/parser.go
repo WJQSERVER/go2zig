@@ -107,6 +107,11 @@ func parseType(raw string) (model.TypeRef, error) {
 	if raw == "" {
 		return model.TypeRef{}, fmt.Errorf("type is empty")
 	}
+	for strings.HasPrefix(raw, "?") {
+		raw = strings.TrimSpace(strings.TrimPrefix(raw, "?"))
+	}
+	raw = strings.TrimPrefix(raw, "[*]const ")
+	raw = strings.TrimPrefix(raw, "[*]")
 	base := raw
 	if idx := strings.LastIndex(base, "."); idx >= 0 {
 		base = base[idx+1:]

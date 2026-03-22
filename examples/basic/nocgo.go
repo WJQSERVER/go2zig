@@ -1,9 +1,9 @@
-//go:build !cgo
+//go:build !(windows && amd64)
 
 package main
 
 import "log"
 
 func main() {
-	log.Fatal("example requires cgo; run with CGO_ENABLED=1 and a working C compiler such as `CC=zig cc`")
+	log.Fatal("example currently requires windows/amd64 for the no-cgo asm runtime")
 }

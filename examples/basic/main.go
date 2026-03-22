@@ -1,4 +1,4 @@
-//go:build cgo
+//go:build windows && amd64
 
 package main
 
@@ -8,6 +8,10 @@ import (
 )
 
 func main() {
+	if err := Default.Load(); err != nil {
+		log.Fatal(err)
+	}
+
 	if !Health() {
 		log.Fatal("zig library is not healthy")
 	}

@@ -13,10 +13,15 @@ import (
 )
 
 type GenerateConfig struct {
-	API         string
-	Output      string
-	PackageName string
-	LibraryName string
+	API          string
+	Output       string
+	PackageName  string
+	LibraryName  string
+	RuntimeZig   string
+	BridgeZig    string
+	APIModule    string
+	ImplModule   string
+	DynamicBuild bool
 }
 
 func Generate(cfg GenerateConfig) error {
@@ -33,10 +38,13 @@ func Generate(cfg GenerateConfig) error {
 	if cfg.LibraryName == "" {
 		cfg.LibraryName = generator.LibraryNameFromPath(cfg.Output)
 	}
-	content, err := generator.Render(api, generator.Config{
+	genCfg := generator.Config{
 		PackageName: cfg.PackageName,
 		LibraryName: cfg.LibraryName,
-	})
+		APIModule:   defaultString(cfg.APIModule, "api.zig"),
+		ImplModule:  defaultString(cfg.ImplModule, "lib.zig"),
+	}
+	content, err := generator.Render(api, genCfg)
 	if err != nil {
 		return err
 	}
@@ -46,21 +54,36 @@ func Generate(cfg GenerateConfig) error {
 	if err := os.WriteFile(cfg.Output, content, 0o644); err != nil {
 		return fmt.Errorf("write generated go file: %w", err)
 	}
+	if cfg.RuntimeZig != "" {
+		if err := os.WriteFile(cfg.RuntimeZig, generator.RenderZigRuntime(genCfg), 0o644); err != nil {
+			return fmt.Errorf("write runtime zig file: %w", err)
+		}
+	}
+	if cfg.BridgeZig != "" {
+		if err := os.WriteFile(cfg.BridgeZig, generator.RenderZigBridge(api, genCfg), 0o644); err != nil {
+			return fmt.Errorf("write bridge zig file: %w", err)
+		}
+	}
 	return nil
 }
 
 type Builder struct {
-	apiPath     string
-	zigPath     string
-	outputPath  string
-	packageName string
-	libraryName string
-	optimize    string
-	headerPath  string
+	apiPath       string
+	zigPath       string
+	outputPath    string
+	packageName   string
+	libraryName   string
+	optimize      string
+	headerPath    string
+	runtimeZig    string
+	bridgeZig     string
+	dynamicBuild  bool
+	apiModuleName string
+	implModule    string
 }
 
 func NewBuilder() *Builder {
-	return &Builder{optimize: "ReleaseSafe"}
+	return &Builder{optimize: "ReleaseSafe", dynamicBuild: true}
 }
 
 func (b *Builder) WithAPI(path string) *Builder {
@@ -98,6 +121,31 @@ func (b *Builder) WithHeaderOutput(path string) *Builder {
 	return b
 }
 
+func (b *Builder) WithRuntimeZig(path string) *Builder {
+	b.runtimeZig = path
+	return b
+}
+
+func (b *Builder) WithBridgeZig(path string) *Builder {
+	b.bridgeZig = path
+	return b
+}
+
+func (b *Builder) WithDynamicBuild(enabled bool) *Builder {
+	b.dynamicBuild = enabled
+	return b
+}
+
+func (b *Builder) WithAPIModuleName(name string) *Builder {
+	b.apiModuleName = name
+	return b
+}
+
+func (b *Builder) WithImplModule(name string) *Builder {
+	b.implModule = name
+	return b
+}
+
 func (b *Builder) Build() error {
 	if b.outputPath == "" {
 		return fmt.Errorf("output path is required")
@@ -118,28 +166,57 @@ func (b *Builder) Build() error {
 			libraryName = generator.LibraryNameFromPath(b.outputPath)
 		}
 	}
+	outputDir := filepath.Dir(b.outputPath)
+	runtimeZig := b.runtimeZig
+	if runtimeZig == "" {
+		runtimeZig = filepath.Join(outputDir, "go2zig_runtime.zig")
+	}
+	bridgeZig := b.bridgeZig
+	if bridgeZig == "" {
+		bridgeZig = filepath.Join(outputDir, "go2zig_exports.zig")
+	}
+	apiModule := b.apiModuleName
+	if apiModule == "" {
+		apiModule = filepath.Base(apiPath)
+	}
+	implModule := b.implModule
+	if implModule == "" && b.zigPath != "" {
+		implModule = filepath.Base(b.zigPath)
+	}
+	if implModule == "" {
+		implModule = "lib.zig"
+	}
 
 	if err := Generate(GenerateConfig{
-		API:         apiPath,
-		Output:      b.outputPath,
-		PackageName: b.packageName,
-		LibraryName: libraryName,
+		API:          apiPath,
+		Output:       b.outputPath,
+		PackageName:  b.packageName,
+		LibraryName:  libraryName,
+		RuntimeZig:   runtimeZig,
+		BridgeZig:    bridgeZig,
+		APIModule:    apiModule,
+		ImplModule:   implModule,
+		DynamicBuild: b.dynamicBuild,
 	}); err != nil {
 		return err
 	}
 	if b.zigPath == "" {
 		return nil
 	}
-	return buildZig(b.zigPath, b.outputPath, libraryName, b.optimize, b.headerPath)
+	return buildZig(b.zigPath, bridgeZig, b.outputPath, libraryName, b.optimize, b.headerPath, b.dynamicBuild)
 }
 
-func buildZig(zigPath, outputPath, libraryName, optimize, headerPath string) error {
+func buildZig(zigPath, bridgePath, outputPath, libraryName, optimize, headerPath string, dynamic bool) error {
 	if optimize == "" {
 		optimize = "ReleaseSafe"
 	}
 	zigAbs, err := filepath.Abs(zigPath)
 	if err != nil {
 		return fmt.Errorf("resolve zig path: %w", err)
+	}
+	bridgeAbs, err := filepath.Abs(bridgePath)
+	if err != nil {
+		return fmt.Errorf("resolve bridge path: %w", err)
 	}
 	outputAbs, err := filepath.Abs(outputPath)
 	if err != nil {
@@ -149,8 +226,12 @@ func buildZig(zigPath, outputPath, libraryName, optimize, headerPath string) err
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create generated dir: %w", err)
 	}
-	libPath := filepath.Join(outputDir, staticLibraryFilename(libraryName))
-	args := []string{"build-lib", "-lc", "-O", optimize, "-femit-bin=" + libPath}
+	binPath := filepath.Join(outputDir, outputLibraryFilename(libraryName, dynamic))
+	args := []string{"build-lib"}
+	if dynamic {
+		args = append(args, "-dynamic")
+	}
+	args = append(args, "-O", optimize, "-femit-bin="+binPath)
 	if headerPath != "" {
 		headerPath, err = filepath.Abs(headerPath)
 		if err != nil {
@@ -158,7 +239,7 @@ func buildZig(zigPath, outputPath, libraryName, optimize, headerPath string) err
 		}
 		args = append(args, "-femit-h="+headerPath)
 	}
-	args = append(args, filepath.Base(zigAbs))
+	args = append(args, filepath.Base(bridgeAbs))
 	cmd := exec.Command("zig", args...)
 	cmd.Dir = filepath.Dir(zigAbs)
 	cmd.Stdout = os.Stdout
@@ -169,13 +250,23 @@ func buildZig(zigPath, outputPath, libraryName, optimize, headerPath string) err
 	return nil
 }
 
-func staticLibraryFilename(name string) string {
+func outputLibraryFilename(name string, dynamic bool) string {
 	clean := strings.TrimSpace(name)
 	if clean == "" {
 		clean = "go2zig"
 	}
+	if dynamic {
+		return generator.DynamicLibraryFilename(clean, runtime.GOOS)
+	}
 	if runtime.GOOS == "windows" {
-		return "lib" + clean + ".a"
+		return clean + ".lib"
 	}
 	return "lib" + clean + ".a"
+}
+
+func defaultString(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
