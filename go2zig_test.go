@@ -35,6 +35,11 @@ pub const DigestList = extern struct {
     len: usize,
 };
 
+pub const MetricList = extern struct {
+    ptr: ?[*]const Metric,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -46,6 +51,11 @@ pub const User = extern struct {
     kind: UserKind,
     name: String,
     email: String,
+    scores: [3]u16,
+};
+
+pub const Metric = extern struct {
+    kind: UserKind,
     scores: [3]u16,
 };
 
@@ -74,6 +84,7 @@ pub extern fn digest_name(name: String) [4]u8;
 pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
+pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 `
 
 const integrationLib = `
@@ -161,6 +172,14 @@ pub fn duplicate_digest(seed: api.String) api.DigestList {
     out[1] = .{ digest[0], digest[1] + 1, digest[2], digest[3] };
     return rt.ownDigestList(out);
 }
+
+pub fn mirror_metrics(metrics: api.MetricList) api.MetricList {
+    const items = rt.asMetricList(metrics);
+    const out = std.heap.page_allocator.alloc(api.Metric, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    @memcpy(out, items);
+    return rt.ownMetricList(out);
+}
 `
 
 func TestGenerateWritesGoFile(t *testing.T) {
@@ -197,6 +216,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"type ScoreList []uint16",
 		"type UserKindList []UserKind",
 		"type DigestList [][4]uint8",
+		"type MetricList []Metric",
 		"var Default = NewGo2ZigClient(\"\")",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
@@ -206,6 +226,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList",
 		"func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList",
 		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
+		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -301,6 +322,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList") {
 		t.Fatalf("generated file missing array-slice wrapper\n%s", string(content))
 	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList") {
+		t.Fatalf("generated file missing struct-slice wrapper\n%s", string(content))
+	}
 }
 
 func TestBuilderGenerateOnly(t *testing.T) {
@@ -393,6 +417,7 @@ func main() {
 	scaled := ScaleScores(ScoreList{2, 4, 6}, 3)
 	history := MirrorKindHistory(UserKindList{UserKindGuest, UserKindAdmin})
 	duplicates := DuplicateDigest("alice")
+	metrics := MirrorMetrics(MetricList{{Kind: UserKindMember, Scores: [3]uint16{3, 5, 8}}, {Kind: UserKindAdmin, Scores: [3]uint16{13, 21, 34}}})
 	checked, err := LoginChecked(LoginRequest{
 		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
@@ -407,7 +432,7 @@ func main() {
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], checked.Message, err != nil)
 }
 `)
 
@@ -418,7 +443,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }

@@ -146,20 +146,20 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, funcs []*Function) (
 		sliceByName:  sliceByName,
 	}
 
+	for _, item := range structs {
+		for i := range item.Fields {
+			if err := api.resolveType(&item.Fields[i].Type, "struct "+item.Name); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	for _, item := range slices {
 		if err := api.resolveType(&item.Elem, "slice "+item.Name); err != nil {
 			return nil, err
 		}
 		if !api.IsPOD(item.Elem) {
 			return nil, fmt.Errorf("slice %q uses unsupported element type %q", item.Name, item.Elem.TypeName())
-		}
-	}
-
-	for _, item := range structs {
-		for i := range item.Fields {
-			if err := api.resolveType(&item.Fields[i].Type, "struct "+item.Name); err != nil {
-				return nil, err
-			}
 		}
 	}
 
@@ -422,6 +422,17 @@ func (a *API) IsPOD(t TypeRef) bool {
 			return false
 		}
 		return a.IsPOD(*t.Elem)
+	case TypeStruct:
+		item := a.Struct(t.Name)
+		if item == nil {
+			return false
+		}
+		for _, field := range item.Fields {
+			if !a.IsPOD(field.Type) {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}

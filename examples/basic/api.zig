@@ -23,6 +23,11 @@ pub const DigestList = extern struct {
     len: usize,
 };
 
+pub const MetricList = extern struct {
+    ptr: ?[*]const Metric,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -34,6 +39,11 @@ pub const User = extern struct {
     kind: UserKind,
     name: String,
     email: String,
+    scores: [3]u16,
+};
+
+pub const Metric = extern struct {
+    kind: UserKind,
     scores: [3]u16,
 };
 
@@ -62,3 +72,4 @@ pub extern fn digest_name(name: String) [4]u8;
 pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
+pub extern fn mirror_metrics(metrics: MetricList) MetricList;

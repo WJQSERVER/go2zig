@@ -89,3 +89,11 @@ pub fn duplicate_digest(seed: api.String) api.DigestList {
     out[1] = .{ digest[0], digest[1] + 1, digest[2], digest[3] };
     return rt.ownDigestList(out);
 }
+
+pub fn mirror_metrics(metrics: api.MetricList) api.MetricList {
+    const items = rt.asMetricList(metrics);
+    const out = std.heap.page_allocator.alloc(api.Metric, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    @memcpy(out, items);
+    return rt.ownMetricList(out);
+}

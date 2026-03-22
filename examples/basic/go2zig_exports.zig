@@ -97,3 +97,12 @@ pub export fn go2zig_call_duplicate_digest(frame: *Go2ZigCallDuplicateDigest) vo
     frame.out = impl.duplicate_digest(frame.seed);
 }
 
+pub const Go2ZigCallMirrorMetrics = extern struct {
+    metrics: api.MetricList,
+    out: api.MetricList,
+};
+
+pub export fn go2zig_call_mirror_metrics(frame: *Go2ZigCallMirrorMetrics) void {
+    frame.out = impl.mirror_metrics(frame.metrics);
+}
+

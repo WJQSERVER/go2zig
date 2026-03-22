@@ -162,6 +162,7 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	body.WriteString("\tif e.Message != \"\" {\n\t\treturn e.Message\n\t}\n")
 	body.WriteString("\treturn fmt.Sprintf(\"zig error code %d\", e.Code)\n")
 	body.WriteString("}\n\n")
+	body.WriteString("func _go2zigKeep(values []any) {\n\tfor _, value := range values {\n\t\truntime.KeepAlive(value)\n\t}\n}\n\n")
 
 	for _, item := range api.Enums {
 		body.WriteString(renderPublicEnum(item))
@@ -499,6 +500,7 @@ func renderFrameStruct(fn *model.Function) string {
 func renderMethod(fn *model.Function) string {
 	goName := names.Exported(fn.Name)
 	var b strings.Builder
+	keepVars := make([]string, 0)
 	b.WriteString("func (c *Go2ZigClient) ")
 	b.WriteString(goName)
 	b.WriteString("(")
@@ -528,6 +530,23 @@ func renderMethod(fn *model.Function) string {
 	b.WriteString(goFrameName(fn))
 	b.WriteString("\n")
 	for _, param := range fn.Params {
+		if param.Type.Kind == model.TypeSlice {
+			keepName := "_keep" + names.Exported(param.Name)
+			keepVars = append(keepVars, keepName)
+			b.WriteString("\t")
+			b.WriteString(keepName)
+			b.WriteString(" := ")
+			b.WriteString(refSliceFuncName(param.Type.Name))
+			b.WriteString("(")
+			b.WriteString(goParamName(param.Name))
+			b.WriteString(")\n")
+			b.WriteString("\tframe.")
+			b.WriteString(param.Name)
+			b.WriteString(" = ")
+			b.WriteString(keepName)
+			b.WriteString(".slice\n")
+			continue
+		}
 		b.WriteString("\tframe.")
 		b.WriteString(param.Name)
 		b.WriteString(" = ")
@@ -541,6 +560,11 @@ func renderMethod(fn *model.Function) string {
 		b.WriteString("\truntime.KeepAlive(")
 		b.WriteString(goParamName(param.Name))
 		b.WriteString(")\n")
+	}
+	for _, keepName := range keepVars {
+		b.WriteString("\t_go2zigKeep(")
+		b.WriteString(keepName)
+		b.WriteString(".keep)\n")
 	}
 	if fn.CanErr {
 		b.WriteString("\tif err := _go2zigOwnError(c.rt, frame.err); err != nil {\n")
@@ -848,19 +872,42 @@ func renderABISlice(item *model.Slice) string {
 
 func renderRefSlice(item *model.Slice) string {
 	var b strings.Builder
+	b.WriteString("type ")
+	b.WriteString(refSliceResultName(item.Name))
+	b.WriteString(" struct {\n")
+	b.WriteString("\tslice ")
+	b.WriteString(abiSliceName(item.Name))
+	b.WriteString("\n\tkeep []any\n}\n\n")
+
 	b.WriteString("func ")
 	b.WriteString(refSliceFuncName(item.Name))
 	b.WriteString("(value ")
 	b.WriteString(item.Name)
 	b.WriteString(") ")
-	b.WriteString(abiSliceName(item.Name))
+	b.WriteString(refSliceResultName(item.Name))
 	b.WriteString(" {\n")
 	b.WriteString("\tif len(value) == 0 {\n\t\treturn ")
-	b.WriteString(abiSliceName(item.Name))
+	b.WriteString(refSliceResultName(item.Name))
 	b.WriteString("{}\n\t}\n")
-	b.WriteString("\treturn ")
-	b.WriteString(abiSliceName(item.Name))
-	b.WriteString("{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}\n")
+	if item.Elem.Kind == model.TypeStruct {
+		b.WriteString("\tbuf := make([]")
+		b.WriteString(abiType(item.Elem))
+		b.WriteString(", len(value))\n")
+		b.WriteString("\tfor i := range value {\n\t\tbuf[i] = ")
+		b.WriteString(refExpr(item.Elem, "value[i]"))
+		b.WriteString("\n\t}\n")
+		b.WriteString("\treturn ")
+		b.WriteString(refSliceResultName(item.Name))
+		b.WriteString("{slice: ")
+		b.WriteString(abiSliceName(item.Name))
+		b.WriteString("{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: []any{buf}}\n")
+	} else {
+		b.WriteString("\treturn ")
+		b.WriteString(refSliceResultName(item.Name))
+		b.WriteString("{slice: ")
+		b.WriteString(abiSliceName(item.Name))
+		b.WriteString("{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}}\n")
+	}
 	b.WriteString("}\n\n")
 	return b.String()
 }
@@ -937,6 +984,10 @@ func collectArrayTypes(api *model.API) []model.TypeRef {
 					walk(field.Type)
 				}
 			}
+		case model.TypeSlice:
+			if t.Elem != nil {
+				walk(*t.Elem)
+			}
 		}
 	}
 	for _, item := range api.Structs {
@@ -949,6 +1000,9 @@ func collectArrayTypes(api *model.API) []model.TypeRef {
 			walk(param.Type)
 		}
 		walk(fn.Return)
+	}
+	for _, item := range api.Slices {
+		walk(item.Elem)
 	}
 	keys := make([]string, 0, len(seen))
 	for key := range seen {
@@ -1034,9 +1088,10 @@ func sanitizeTypeKey(key string) string {
 	return b.String()
 }
 
-func abiSliceName(name string) string     { return "_go2zig" + name }
-func refSliceFuncName(name string) string { return "_go2zigRef" + name }
-func ownSliceFuncName(name string) string { return "_go2zigOwn" + name }
+func abiSliceName(name string) string       { return "_go2zig" + name }
+func refSliceFuncName(name string) string   { return "_go2zigRef" + name }
+func ownSliceFuncName(name string) string   { return "_go2zigOwn" + name }
+func refSliceResultName(name string) string { return "_go2zigRef" + name + "Result" }
 
 func abiZeroValue(t model.TypeRef) string {
 	switch t.Kind {

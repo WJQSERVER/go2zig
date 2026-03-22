@@ -34,6 +34,11 @@ pub const DigestList = extern struct {
     len: usize,
 };
 
+pub const MetricList = extern struct {
+    ptr: ?[*]const Metric,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -46,6 +51,11 @@ pub const User = extern struct {
     kind: UserKind,
     name: String,
     email: String,
+    scores: [3]u16,
+};
+
+pub const Metric = extern struct {
+    kind: UserKind,
     scores: [3]u16,
 };
 
@@ -76,6 +86,7 @@ pub extern fn digest_name(name: String) [4]u8;
 pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
+pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 `
 
 func TestParse(t *testing.T) {
@@ -86,17 +97,17 @@ func TestParse(t *testing.T) {
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	if len(api.Structs) != 3 {
-		t.Fatalf("Parse() structs = %d, want 3", len(api.Structs))
+	if len(api.Structs) != 4 {
+		t.Fatalf("Parse() structs = %d, want 4", len(api.Structs))
 	}
 	if len(api.Enums) != 1 {
 		t.Fatalf("Parse() enums = %d, want 1", len(api.Enums))
 	}
-	if len(api.Slices) != 3 {
-		t.Fatalf("Parse() slices = %d, want 3", len(api.Slices))
+	if len(api.Slices) != 4 {
+		t.Fatalf("Parse() slices = %d, want 4", len(api.Slices))
 	}
-	if len(api.Funcs) != 9 {
-		t.Fatalf("Parse() funcs = %d, want 9", len(api.Funcs))
+	if len(api.Funcs) != 10 {
+		t.Fatalf("Parse() funcs = %d, want 10", len(api.Funcs))
 	}
 
 	if api.Struct("String") != nil || api.Struct("Bytes") != nil {
@@ -149,6 +160,9 @@ func TestParse(t *testing.T) {
 	}
 	if got := api.Funcs[8].Return.Elem.Kind; got != model.TypeArray {
 		t.Fatalf("duplicate_digest elem kind = %v, want array", got)
+	}
+	if got := api.Funcs[9].Params[0].Type.Elem.Kind; got != model.TypeStruct {
+		t.Fatalf("mirror_metrics elem kind = %v, want struct", got)
 	}
 }
 

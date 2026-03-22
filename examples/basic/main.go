@@ -72,9 +72,10 @@ func main() {
 	scaled := ScaleScores(ScoreList{2, 4, 6}, 3)
 	history := MirrorKindHistory(UserKindList{UserKindGuest, UserKindAdmin})
 	duplicates := DuplicateDigest("alice")
+	metrics := MirrorMetrics(MetricList{{Kind: UserKindMember, Scores: [3]uint16{3, 5, 8}}, {Kind: UserKindAdmin, Scores: [3]uint16{13, 21, 34}}})
 
 	fmt.Printf("login ok=%v message=%q token=%q\n", resp.OK, resp.Message, string(resp.Token))
 	fmt.Printf("checked login ok=%v message=%q\n", checked.OK, checked.Message)
 	fmt.Printf("renamed user=%+v\n", renamed)
-	fmt.Printf("promoted kind=%d scores=%v digest=%v scaled=%v history=%v duplicates=%v\n", promoted.Kind, promoted.Scores, digest, scaled, history, duplicates)
+	fmt.Printf("promoted kind=%d scores=%v digest=%v scaled=%v history=%v duplicates=%v metrics=%v\n", promoted.Kind, promoted.Scores, digest, scaled, history, duplicates, metrics)
 }

@@ -16,6 +16,7 @@ func TestRender(t *testing.T) {
 		pub const ScoreList = extern struct { ptr: ?[*]const u16, len: usize, };
 		pub const UserKindList = extern struct { ptr: ?[*]const UserKind, len: usize, };
 		pub const DigestList = extern struct { ptr: ?[*]const [4]u8, len: usize, };
+		pub const MetricList = extern struct { ptr: ?[*]const Metric, len: usize, };
 		pub const UserKind = enum(u8) { guest, member, admin };
         pub const User = extern struct {
             id: u64,
@@ -24,6 +25,10 @@ func TestRender(t *testing.T) {
             email: String,
             scores: [3]u16,
         };
+		pub const Metric = extern struct {
+			kind: UserKind,
+			scores: [3]u16,
+		};
         pub const LoginRequest = extern struct {
             user: User,
             password: String,
@@ -44,6 +49,7 @@ func TestRender(t *testing.T) {
 		pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 		pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 		pub extern fn duplicate_digest(seed: String) DigestList;
+		pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 	`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -64,6 +70,7 @@ func TestRender(t *testing.T) {
 		"type ScoreList []uint16",
 		"type UserKindList []UserKind",
 		"type DigestList [][4]uint8",
+		"type MetricList []Metric",
 		"UserKindAdmin",
 		"func NewGo2ZigClient(path string) *Go2ZigClient",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
@@ -75,7 +82,9 @@ func TestRender(t *testing.T) {
 		"func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList",
 		"func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList",
 		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
-		"func _go2zigRefScoreList(value ScoreList) _go2zigScoreList",
+		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
+		"func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult",
+		"func _go2zigRefScoreList(value ScoreList) _go2zigRefScoreListResult",
 		"func _go2zigRefArray_",
 		"go2zig_call_login",
 		"type Go2ZigError struct",

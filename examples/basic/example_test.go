@@ -100,4 +100,9 @@ func TestExampleAPI(t *testing.T) {
 	if len(duplicates) != 2 || duplicates[0] != [4]uint8{'a', 5, 0xAB, 0xCD} || duplicates[1][1] != 6 {
 		t.Fatalf("DuplicateDigest() result = %v, want two digests", duplicates)
 	}
+
+	metrics := MirrorMetrics(MetricList{{Kind: UserKindMember, Scores: [3]uint16{3, 5, 8}}, {Kind: UserKindAdmin, Scores: [3]uint16{13, 21, 34}}})
+	if len(metrics) != 2 || metrics[0].Kind != UserKindMember || metrics[1].Scores[0] != 13 {
+		t.Fatalf("MirrorMetrics() result = %v, want mirrored metrics", metrics)
+	}
 }
