@@ -8,10 +8,18 @@ pub const Bytes = extern struct {
     len: usize,
 };
 
+pub const UserKind = enum(u8) {
+    guest,
+    member,
+    admin,
+};
+
 pub const User = extern struct {
     id: u64,
+    kind: UserKind,
     name: String,
     email: String,
+    scores: [3]u16,
 };
 
 pub const LoginRequest = extern struct {
@@ -23,6 +31,7 @@ pub const LoginResponse = extern struct {
     ok: bool,
     message: String,
     token: Bytes,
+    digest: [4]u8,
 };
 
 pub const LoginError = error{
@@ -33,3 +42,5 @@ pub extern fn health() bool;
 pub extern fn login(req: LoginRequest) LoginResponse;
 pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
+pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
+pub extern fn digest_name(name: String) [4]u8;

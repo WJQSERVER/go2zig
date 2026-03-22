@@ -33,6 +33,8 @@ type _go2zigRuntime struct {
 	procLogin        uintptr
 	procLoginChecked uintptr
 	procRenameUser   uintptr
+	procPromoteUser  uintptr
+	procDigestName   uintptr
 	err              error
 }
 
@@ -66,6 +68,14 @@ func (rt *_go2zigRuntime) Load() error {
 		}
 		if rt.procRenameUser, err = lib.Lookup("go2zig_call_rename_user"); err != nil {
 			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_rename_user: %w", err)
+			return
+		}
+		if rt.procPromoteUser, err = lib.Lookup("go2zig_call_promote_user"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_promote_user: %w", err)
+			return
+		}
+		if rt.procDigestName, err = lib.Lookup("go2zig_call_digest_name"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_digest_name: %w", err)
 			return
 		}
 	})
@@ -194,31 +204,79 @@ func (e *Go2ZigError) Error() string {
 	return fmt.Sprintf("zig error code %d", e.Code)
 }
 
+type UserKind uint8
+
+const (
+	UserKindGuest  UserKind = UserKind(0)
+	UserKindMember UserKind = UserKind(1)
+	UserKindAdmin  UserKind = UserKind(2)
+)
+
+func _go2zigRefArray_array_3_1_u16(value [3]uint16) [3]uint16 {
+	var out [3]uint16
+	for i := range value {
+		out[i] = uint16(value[i])
+	}
+	return out
+}
+
+func _go2zigOwnArray_array_3_1_u16(rt *_go2zigRuntime, value [3]uint16) [3]uint16 {
+	var out [3]uint16
+	for i := range value {
+		out[i] = uint16(value[i])
+	}
+	return out
+}
+
+func _go2zigRefArray_array_4_1_u8(value [4]uint8) [4]uint8 {
+	var out [4]uint8
+	for i := range value {
+		out[i] = uint8(value[i])
+	}
+	return out
+}
+
+func _go2zigOwnArray_array_4_1_u8(rt *_go2zigRuntime, value [4]uint8) [4]uint8 {
+	var out [4]uint8
+	for i := range value {
+		out[i] = uint8(value[i])
+	}
+	return out
+}
+
 type User struct {
-	ID    uint64
-	Name  string
-	Email string
+	ID     uint64
+	Kind   UserKind
+	Name   string
+	Email  string
+	Scores [3]uint16
 }
 
 type _go2zigUser struct {
-	id    uint64
-	name  _go2zigString
-	email _go2zigString
+	id     uint64
+	kind   uint8
+	name   _go2zigString
+	email  _go2zigString
+	scores [3]uint16
 }
 
 func _go2zigRefUser(value User) _go2zigUser {
 	return _go2zigUser{
-		id:    uint64(value.ID),
-		name:  _go2zigRefString(value.Name),
-		email: _go2zigRefString(value.Email),
+		id:     uint64(value.ID),
+		kind:   uint8(value.Kind),
+		name:   _go2zigRefString(value.Name),
+		email:  _go2zigRefString(value.Email),
+		scores: _go2zigRefArray_array_3_1_u16(value.Scores),
 	}
 }
 
 func _go2zigOwnUser(rt *_go2zigRuntime, value _go2zigUser) User {
 	return User{
-		ID:    uint64(value.id),
-		Name:  _go2zigOwnString(rt, value.name),
-		Email: _go2zigOwnString(rt, value.email),
+		ID:     uint64(value.id),
+		Kind:   UserKind(value.kind),
+		Name:   _go2zigOwnString(rt, value.name),
+		Email:  _go2zigOwnString(rt, value.email),
+		Scores: _go2zigOwnArray_array_3_1_u16(rt, value.scores),
 	}
 }
 
@@ -250,12 +308,14 @@ type LoginResponse struct {
 	OK      bool
 	Message string
 	Token   []byte
+	Digest  [4]uint8
 }
 
 type _go2zigLoginResponse struct {
 	ok      uint8
 	message _go2zigString
 	token   _go2zigBytes
+	digest  [4]uint8
 }
 
 func _go2zigRefLoginResponse(value LoginResponse) _go2zigLoginResponse {
@@ -263,6 +323,7 @@ func _go2zigRefLoginResponse(value LoginResponse) _go2zigLoginResponse {
 		ok:      _go2zigBool(value.OK),
 		message: _go2zigRefString(value.Message),
 		token:   _go2zigRefBytes(value.Token),
+		digest:  _go2zigRefArray_array_4_1_u8(value.Digest),
 	}
 }
 
@@ -271,6 +332,7 @@ func _go2zigOwnLoginResponse(rt *_go2zigRuntime, value _go2zigLoginResponse) Log
 		OK:      _go2zigFromBool(value.ok),
 		Message: _go2zigOwnString(rt, value.message),
 		Token:   _go2zigOwnBytes(rt, value.token),
+		Digest:  _go2zigOwnArray_array_4_1_u8(rt, value.digest),
 	}
 }
 
@@ -293,6 +355,18 @@ type _go2zigCallRenameUser struct {
 	user      _go2zigUser
 	next_name _go2zigString
 	out       _go2zigUser
+}
+
+type _go2zigCallPromoteUser struct {
+	user        _go2zigUser
+	next_kind   uint8
+	next_scores [3]uint16
+	out         _go2zigUser
+}
+
+type _go2zigCallDigestName struct {
+	name _go2zigString
+	out  [4]uint8
 }
 
 func (c *Go2ZigClient) Health() bool {
@@ -345,4 +419,32 @@ func (c *Go2ZigClient) RenameUser(user User, nextName string) User {
 
 func RenameUser(user User, nextName string) User {
 	return Default.RenameUser(user, nextName)
+}
+
+func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User {
+	var frame _go2zigCallPromoteUser
+	frame.user = _go2zigRefUser(user)
+	frame.next_kind = uint8(nextKind)
+	frame.next_scores = _go2zigRefArray_array_3_1_u16(nextScores)
+	c.rt.call(c.rt.procPromoteUser, unsafe.Pointer(&frame))
+	runtime.KeepAlive(user)
+	runtime.KeepAlive(nextKind)
+	runtime.KeepAlive(nextScores)
+	return _go2zigOwnUser(c.rt, frame.out)
+}
+
+func PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User {
+	return Default.PromoteUser(user, nextKind, nextScores)
+}
+
+func (c *Go2ZigClient) DigestName(name string) [4]uint8 {
+	var frame _go2zigCallDigestName
+	frame.name = _go2zigRefString(name)
+	c.rt.call(c.rt.procDigestName, unsafe.Pointer(&frame))
+	runtime.KeepAlive(name)
+	return _go2zigOwnArray_array_4_1_u8(c.rt, frame.out)
+}
+
+func DigestName(name string) [4]uint8 {
+	return Default.DigestName(name)
 }

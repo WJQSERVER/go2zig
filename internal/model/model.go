@@ -3,6 +3,8 @@ package model
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 type TypeKind int
@@ -13,6 +15,8 @@ const (
 	TypeString
 	TypeBytes
 	TypeStruct
+	TypeEnum
+	TypeArray
 )
 
 type PrimitiveInfo struct {
@@ -43,6 +47,8 @@ type TypeRef struct {
 	Raw       string
 	Name      string
 	Primitive PrimitiveInfo
+	Elem      *TypeRef
+	ArrayLen  int
 }
 
 type Field struct {
@@ -55,6 +61,18 @@ type Struct struct {
 	Fields []Field
 }
 
+type EnumValue struct {
+	Name  string
+	Value string
+}
+
+type Enum struct {
+	Name      string
+	BaseName  string
+	Primitive PrimitiveInfo
+	Values    []EnumValue
+}
+
 type Function struct {
 	Name   string
 	Params []Field
@@ -64,12 +82,14 @@ type Function struct {
 
 type API struct {
 	Structs []*Struct
+	Enums   []*Enum
 	Funcs   []*Function
 
 	structByName map[string]*Struct
+	enumByName   map[string]*Enum
 }
 
-func New(structs []*Struct, funcs []*Function) (*API, error) {
+func New(structs []*Struct, enums []*Enum, funcs []*Function) (*API, error) {
 	structByName := make(map[string]*Struct, len(structs))
 	for _, item := range structs {
 		if _, ok := structByName[item.Name]; ok {
@@ -78,36 +98,72 @@ func New(structs []*Struct, funcs []*Function) (*API, error) {
 		structByName[item.Name] = item
 	}
 
+	enumByName := make(map[string]*Enum, len(enums))
+	for _, item := range enums {
+		if _, ok := structByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := enumByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate enum %q", item.Name)
+		}
+		base, ok := Primitive(item.BaseName)
+		if !ok || item.BaseName == "bool" {
+			return nil, fmt.Errorf("enum %q uses unsupported base type %q", item.Name, item.BaseName)
+		}
+		item.Primitive = base
+		enumByName[item.Name] = item
+	}
+
+	api := &API{
+		Structs:      structs,
+		Enums:        enums,
+		Funcs:        funcs,
+		structByName: structByName,
+		enumByName:   enumByName,
+	}
+
 	for _, item := range structs {
-		for _, field := range item.Fields {
-			if field.Type.Kind == TypeStruct {
-				if _, ok := structByName[field.Type.Name]; !ok {
-					return nil, fmt.Errorf("struct %q uses unknown type %q", item.Name, field.Type.Name)
-				}
+		for i := range item.Fields {
+			if err := api.resolveType(&item.Fields[i].Type, "struct "+item.Name); err != nil {
+				return nil, err
 			}
 		}
 	}
 
 	for _, item := range funcs {
-		for _, param := range item.Params {
-			if param.Type.Kind == TypeStruct {
-				if _, ok := structByName[param.Type.Name]; !ok {
-					return nil, fmt.Errorf("function %q uses unknown type %q", item.Name, param.Type.Name)
-				}
+		for i := range item.Params {
+			if err := api.resolveType(&item.Params[i].Type, "function "+item.Name); err != nil {
+				return nil, err
 			}
 		}
-		if item.Return.Kind == TypeStruct {
-			if _, ok := structByName[item.Return.TypeName()]; !ok {
-				return nil, fmt.Errorf("function %q returns unknown type %q", item.Name, item.Return.TypeName())
-			}
+		if err := api.resolveType(&item.Return, "function "+item.Name); err != nil {
+			return nil, err
 		}
 	}
 
-	return &API{
-		Structs:      structs,
-		Funcs:        funcs,
-		structByName: structByName,
-	}, nil
+	return api, nil
+}
+
+func (a *API) resolveType(t *TypeRef, owner string) error {
+	switch t.Kind {
+	case TypeStruct:
+		if _, ok := a.structByName[t.Name]; ok {
+			return nil
+		}
+		if enum, ok := a.enumByName[t.Name]; ok {
+			t.Kind = TypeEnum
+			t.Primitive = enum.Primitive
+			return nil
+		}
+		return fmt.Errorf("%s uses unknown type %q", owner, t.Name)
+	case TypeArray:
+		if t.Elem == nil {
+			return fmt.Errorf("%s uses malformed array type %q", owner, t.Raw)
+		}
+		return a.resolveType(t.Elem, owner)
+	default:
+		return nil
+	}
 }
 
 func Primitive(raw string) (PrimitiveInfo, bool) {
@@ -124,15 +180,47 @@ func PrimitiveNames() []string {
 	return names
 }
 
-func (t TypeRef) TypeName() string {
-	if t.Kind == TypeStruct {
-		return t.Name
+func (t TypeRef) Clone() TypeRef {
+	copy := t
+	if t.Elem != nil {
+		elem := t.Elem.Clone()
+		copy.Elem = &elem
 	}
-	return t.Raw
+	return copy
+}
+
+func (t TypeRef) TypeName() string {
+	switch t.Kind {
+	case TypeStruct, TypeEnum:
+		return t.Name
+	case TypeArray:
+		if t.Elem == nil {
+			return t.Raw
+		}
+		return "[" + strconv.Itoa(t.ArrayLen) + "]" + t.Elem.TypeName()
+	default:
+		return t.Raw
+	}
+}
+
+func (t TypeRef) Key() string {
+	switch t.Kind {
+	case TypeArray:
+		if t.Elem == nil {
+			return strings.TrimSpace(t.Raw)
+		}
+		return fmt.Sprintf("array:%d:%s", t.ArrayLen, t.Elem.Key())
+	default:
+		return fmt.Sprintf("%d:%s", t.Kind, t.TypeName())
+	}
 }
 
 func (a *API) Struct(name string) *Struct {
 	return a.structByName[name]
+}
+
+func (a *API) Enum(name string) *Enum {
+	return a.enumByName[name]
 }
 
 func (a *API) StructNeedsAllocation(name string) bool {
@@ -147,6 +235,11 @@ func (a *API) typeNeedsAllocation(t TypeRef, seen map[string]bool) bool {
 	switch t.Kind {
 	case TypeString, TypeBytes:
 		return true
+	case TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return a.typeNeedsAllocation(*t.Elem, seen)
 	case TypeStruct:
 		if seen[t.Name] {
 			return false
@@ -173,6 +266,11 @@ func (a *API) typeNeedsFree(t TypeRef, seen map[string]bool) bool {
 	switch t.Kind {
 	case TypeString, TypeBytes:
 		return true
+	case TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return a.typeNeedsFree(*t.Elem, seen)
 	case TypeStruct:
 		if seen[t.Name] {
 			return false
@@ -203,8 +301,27 @@ func (a *API) FunctionNeedsArena(fn *Function) bool {
 func (a *API) SortedStructs() ([]*Struct, error) {
 	order := make([]*Struct, 0, len(a.Structs))
 	state := make(map[string]int, len(a.Structs))
-
 	var visit func(item *Struct) error
+
+	var visitType func(owner string, t TypeRef) error
+	visitType = func(owner string, t TypeRef) error {
+		switch t.Kind {
+		case TypeStruct:
+			dep := a.Struct(t.Name)
+			if dep == nil {
+				return fmt.Errorf("%s uses unknown type %q", owner, t.Name)
+			}
+			return visit(dep)
+		case TypeArray:
+			if t.Elem == nil {
+				return fmt.Errorf("%s uses malformed array type %q", owner, t.Raw)
+			}
+			return visitType(owner, *t.Elem)
+		default:
+			return nil
+		}
+	}
+
 	visit = func(item *Struct) error {
 		switch state[item.Name] {
 		case 1:
@@ -214,14 +331,7 @@ func (a *API) SortedStructs() ([]*Struct, error) {
 		}
 		state[item.Name] = 1
 		for _, field := range item.Fields {
-			if field.Type.Kind != TypeStruct {
-				continue
-			}
-			dep := a.Struct(field.Type.Name)
-			if dep == nil {
-				return fmt.Errorf("struct %q uses unknown type %q", item.Name, field.Type.Name)
-			}
-			if err := visit(dep); err != nil {
+			if err := visitType("struct "+item.Name, field.Type); err != nil {
 				return err
 			}
 		}

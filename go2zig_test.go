@@ -20,10 +20,18 @@ pub const Bytes = extern struct {
     len: usize,
 };
 
+pub const UserKind = enum(u8) {
+    guest,
+    member,
+    admin,
+};
+
 pub const User = extern struct {
     id: u64,
+    kind: UserKind,
     name: String,
     email: String,
+    scores: [3]u16,
 };
 
 pub const LoginRequest = extern struct {
@@ -35,6 +43,7 @@ pub const LoginResponse = extern struct {
     ok: bool,
     message: String,
     token: Bytes,
+    digest: [4]u8,
 };
 
 pub const LoginError = error{
@@ -45,6 +54,8 @@ pub extern fn health() bool;
 pub extern fn login(req: LoginRequest) LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
 pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
+pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
+pub extern fn digest_name(name: String) [4]u8;
 `
 
 const integrationLib = `
@@ -62,14 +73,17 @@ pub fn login(req: api.LoginRequest) api.LoginResponse {
         .ok = ok,
         .message = rt.ownString(if (ok) "welcome alice" else "bad password"),
         .token = rt.ownBytes(if (ok) "token-123" else &.{}),
+        .digest = .{ 1, 2, 3, 4 },
     };
 }
 
 pub fn rename_user(user: api.User, next_name: api.String) api.User {
     return .{
         .id = user.id,
+        .kind = user.kind,
         .name = rt.ownString(rt.asSlice(next_name)),
         .email = rt.ownString(rt.asSlice(user.email)),
+        .scores = user.scores,
     };
 }
 
@@ -79,6 +93,27 @@ pub fn login_checked(req: api.LoginRequest) api.LoginError!api.LoginResponse {
         .ok = true,
         .message = rt.ownString("welcome alice"),
         .token = rt.ownBytes("token-123"),
+        .digest = .{ 1, 2, 3, 4 },
+    };
+}
+
+pub fn promote_user(user: api.User, next_kind: api.UserKind, next_scores: [3]u16) api.User {
+    return .{
+        .id = user.id,
+        .kind = next_kind,
+        .name = rt.ownString(rt.asSlice(user.name)),
+        .email = rt.ownString(rt.asSlice(user.email)),
+        .scores = next_scores,
+    };
+}
+
+pub fn digest_name(name: api.String) [4]u8 {
+    const value = rt.asSlice(name);
+    return .{
+        if (value.len > 0) value[0] else 0,
+        @as(u8, @intCast(value.len)),
+        0xAB,
+        0xCD,
     };
 }
 `
@@ -113,10 +148,13 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"//go:build amd64 && (windows || linux)",
 		"package sample",
 		"type Go2ZigClient struct",
+		"type UserKind uint8",
 		"var Default = NewGo2ZigClient(\"\")",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
 		"func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)",
+		"func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User",
+		"func (c *Go2ZigClient) DigestName(name string) [4]uint8",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -200,6 +238,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)") {
 		t.Fatalf("generated file missing error-return wrapper\n%s", string(content))
 	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User") {
+		t.Fatalf("generated file missing enum/array wrapper\n%s", string(content))
+	}
 }
 
 func TestBuilderGenerateOnly(t *testing.T) {
@@ -280,28 +321,30 @@ func main() {
 		panic("health check failed")
 	}
 	resp := Login(LoginRequest{
-		User: User{ID: 7, Name: "alice", Email: "alice@example.com"},
+		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
 	})
 	if !resp.OK {
 		panic("login failed")
 	}
-	renamed := RenameUser(User{ID: 7, Name: "alice", Email: "alice@example.com"}, "ally")
+	renamed := RenameUser(User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, "ally")
+	promoted := PromoteUser(User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, UserKindAdmin, [3]uint16{13, 21, 34})
+	digest := DigestName("alice")
 	checked, err := LoginChecked(LoginRequest{
-		User: User{ID: 7, Name: "alice", Email: "alice@example.com"},
+		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
 	})
 	if err != nil {
 		panic(err)
 	}
 	_, err = LoginChecked(LoginRequest{
-		User: User{ID: 7, Name: "alice", Email: "alice@example.com"},
+		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "bad",
 	})
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%s|%v", resp.Message, string(resp.Token), renamed.Name, checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], checked.Message, err != nil)
 }
 `)
 
@@ -312,7 +355,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }

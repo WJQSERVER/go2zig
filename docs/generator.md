@@ -20,6 +20,8 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 ## `gen.go` 的职责
 
 - 定义公开给 Go 业务使用的 struct 和函数
+- 生成 Zig 枚举对应的 Go 命名类型和常量
+- 生成固定长度数组的 ABI 转换 helper
 - 生成 `Go2ZigClient`
 - 默认生成 `Default` 实例和顶层转发函数
 - 定义 ABI 结构和 frame 结构

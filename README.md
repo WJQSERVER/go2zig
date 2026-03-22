@@ -50,8 +50,10 @@ pub extern fn rename_user(user: User, next_name: String) User;
 目前支持：
 
 - 基础类型：`bool` `u8/u16/u32/u64/usize` `i8/i16/i32/i64/isize` `f32` `f64`
+- `enum(<int>)` 风格枚举
 - 特殊类型：`String` `Bytes`
 - `extern struct` 组合和嵌套
+- 固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]MyEnum`
 - `pub extern fn` / `pub export fn` 风格函数签名解析
 - `[*]const u8` 与 `?[*]const u8` 这类 Zig 指针形式的 `String`/`Bytes` 别名
 

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"go/format"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"go2zig/internal/model"
@@ -160,6 +162,15 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	body.WriteString("\tif e.Message != \"\" {\n\t\treturn e.Message\n\t}\n")
 	body.WriteString("\treturn fmt.Sprintf(\"zig error code %d\", e.Code)\n")
 	body.WriteString("}\n\n")
+
+	for _, item := range api.Enums {
+		body.WriteString(renderPublicEnum(item))
+	}
+
+	for _, item := range collectArrayTypes(api) {
+		body.WriteString(renderArrayRefHelper(item))
+		body.WriteString(renderArrayOwnHelper(item))
+	}
 
 	for _, item := range api.Structs {
 		body.WriteString(renderPublicStruct(item))
@@ -452,13 +463,23 @@ func renderFrameStruct(fn *model.Function) string {
 	b.WriteString("type ")
 	b.WriteString(goFrameName(fn))
 	b.WriteString(" struct {\n")
-	fields := frameFields(fn)
-	for _, field := range fields {
+	for _, param := range fn.Params {
 		b.WriteString("\t")
-		b.WriteString(field.name)
+		b.WriteString(param.Name)
 		b.WriteString(" ")
-		b.WriteString(goFrameFieldType(field.typ))
+		b.WriteString(goFrameType(param.Type))
 		b.WriteString("\n")
+	}
+	if fn.Return.Kind != model.TypeVoid {
+		b.WriteString("\tout ")
+		b.WriteString(goFrameType(fn.Return))
+		b.WriteString("\n")
+	}
+	if fn.CanErr {
+		b.WriteString("\terr _go2zigError\n")
+	}
+	if len(fn.Params) == 0 && fn.Return.Kind == model.TypeVoid && !fn.CanErr {
+		b.WriteString("\treserved uintptr\n")
 	}
 	b.WriteString("}\n\n")
 	return b.String()
@@ -586,10 +607,14 @@ func refExpr(t model.TypeRef, expr string) string {
 			return "_go2zigBool(" + expr + ")"
 		}
 		return abiType(t) + "(" + expr + ")"
+	case model.TypeEnum:
+		return abiType(t) + "(" + expr + ")"
 	case model.TypeString:
 		return "_go2zigRefString(" + expr + ")"
 	case model.TypeBytes:
 		return "_go2zigRefBytes(" + expr + ")"
+	case model.TypeArray:
+		return arrayRefFuncName(t) + "(" + expr + ")"
 	case model.TypeStruct:
 		return refFuncName(t.Name) + "(" + expr + ")"
 	default:
@@ -604,10 +629,14 @@ func ownExprRT(rtName string, t model.TypeRef, expr string) string {
 			return "_go2zigFromBool(" + expr + ")"
 		}
 		return goType(t) + "(" + expr + ")"
+	case model.TypeEnum:
+		return goType(t) + "(" + expr + ")"
 	case model.TypeString:
 		return "_go2zigOwnString(" + rtName + ", " + expr + ")"
 	case model.TypeBytes:
 		return "_go2zigOwnBytes(" + rtName + ", " + expr + ")"
+	case model.TypeArray:
+		return arrayOwnFuncName(t) + "(" + rtName + ", " + expr + ")"
 	case model.TypeStruct:
 		return ownFuncName(t.Name) + "(" + rtName + ", " + expr + ")"
 	default:
@@ -619,10 +648,17 @@ func goType(t model.TypeRef) string {
 	switch t.Kind {
 	case model.TypePrimitive:
 		return t.Primitive.Go
+	case model.TypeEnum:
+		return t.Name
 	case model.TypeString:
 		return "string"
 	case model.TypeBytes:
 		return "[]byte"
+	case model.TypeArray:
+		if t.Elem == nil {
+			return t.Raw
+		}
+		return fmt.Sprintf("[%d]%s", t.ArrayLen, goType(*t.Elem))
 	case model.TypeStruct:
 		return t.Name
 	case model.TypeVoid:
@@ -639,10 +675,17 @@ func abiType(t model.TypeRef) string {
 			return "uint8"
 		}
 		return t.Primitive.Go
+	case model.TypeEnum:
+		return t.Primitive.Go
 	case model.TypeString:
 		return "_go2zigString"
 	case model.TypeBytes:
 		return "_go2zigBytes"
+	case model.TypeArray:
+		if t.Elem == nil {
+			return t.Raw
+		}
+		return fmt.Sprintf("[%d]%s", t.ArrayLen, abiType(*t.Elem))
 	case model.TypeStruct:
 		return abiStructName(t.Name)
 	default:
@@ -654,8 +697,15 @@ func zigType(t model.TypeRef) string {
 	switch t.Kind {
 	case model.TypePrimitive:
 		return t.Primitive.Zig
+	case model.TypeEnum:
+		return "api." + t.Name
 	case model.TypeString, model.TypeBytes, model.TypeStruct:
 		return "api." + t.TypeName()
+	case model.TypeArray:
+		if t.Elem == nil {
+			return t.Raw
+		}
+		return fmt.Sprintf("[%d]%s", t.ArrayLen, zigType(*t.Elem))
 	default:
 		return "void"
 	}
@@ -673,24 +723,28 @@ func zigFrameName(fn *model.Function) string {
 func procFieldName(fn *model.Function) string  { return "proc" + names.Exported(fn.Name) }
 func procSymbolName(fn *model.Function) string { return "go2zig_call_" + fn.Name }
 
-func goFrameFieldType(zigType string) string {
-	switch zigType {
-	case "api.String":
-		return "_go2zigString"
-	case "api.Bytes":
-		return "_go2zigBytes"
-	case "rt.ErrorInfo":
-		return "_go2zigError"
-	case "usize":
-		return "uintptr"
-	default:
-		if strings.HasPrefix(zigType, "api.") {
-			return abiStructName(strings.TrimPrefix(zigType, "api."))
-		}
-		if zigType == "bool" {
+func goFrameType(t model.TypeRef) string {
+	switch t.Kind {
+	case model.TypePrimitive:
+		if t.Name == "bool" {
 			return "uint8"
 		}
-		return zigType
+		return t.Primitive.Go
+	case model.TypeEnum:
+		return t.Primitive.Go
+	case model.TypeString:
+		return "_go2zigString"
+	case model.TypeBytes:
+		return "_go2zigBytes"
+	case model.TypeStruct:
+		return abiStructName(t.Name)
+	case model.TypeArray:
+		if t.Elem == nil {
+			return t.Raw
+		}
+		return fmt.Sprintf("[%d]%s", t.ArrayLen, goFrameType(*t.Elem))
+	default:
+		return "uintptr"
 	}
 }
 
@@ -709,4 +763,153 @@ func goParamName(name string) string {
 
 func escapeZigString(value string) string {
 	return strings.ReplaceAll(value, "\\", "\\\\")
+}
+
+func renderPublicEnum(item *model.Enum) string {
+	var b strings.Builder
+	b.WriteString("type ")
+	b.WriteString(item.Name)
+	b.WriteString(" ")
+	b.WriteString(item.Primitive.Go)
+	b.WriteString("\n\nconst (\n")
+	nextValue := 0
+	for _, value := range item.Values {
+		b.WriteString("\t")
+		b.WriteString(item.Name)
+		b.WriteString(names.Exported(value.Name))
+		b.WriteString(" ")
+		b.WriteString(item.Name)
+		b.WriteString(" = ")
+		if value.Value != "" {
+			b.WriteString(item.Name)
+			b.WriteString("(")
+			b.WriteString(value.Value)
+			b.WriteString(")")
+			if parsed, err := strconv.ParseInt(value.Value, 0, 64); err == nil {
+				nextValue = int(parsed) + 1
+			}
+		} else {
+			b.WriteString(item.Name)
+			b.WriteString("(")
+			b.WriteString(strconv.Itoa(nextValue))
+			b.WriteString(")")
+			nextValue++
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(")\n\n")
+	return b.String()
+}
+
+func collectArrayTypes(api *model.API) []model.TypeRef {
+	seen := map[string]model.TypeRef{}
+	var walk func(t model.TypeRef)
+	walk = func(t model.TypeRef) {
+		switch t.Kind {
+		case model.TypeArray:
+			seen[t.Key()] = t.Clone()
+			if t.Elem != nil {
+				walk(*t.Elem)
+			}
+		case model.TypeStruct:
+			if item := api.Struct(t.Name); item != nil {
+				for _, field := range item.Fields {
+					walk(field.Type)
+				}
+			}
+		}
+	}
+	for _, item := range api.Structs {
+		for _, field := range item.Fields {
+			walk(field.Type)
+		}
+	}
+	for _, fn := range api.Funcs {
+		for _, param := range fn.Params {
+			walk(param.Type)
+		}
+		walk(fn.Return)
+	}
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	arrays := make([]model.TypeRef, 0, len(keys))
+	for _, key := range keys {
+		arrays = append(arrays, seen[key])
+	}
+	return arrays
+}
+
+func renderArrayRefHelper(t model.TypeRef) string {
+	var b strings.Builder
+	b.WriteString("func ")
+	b.WriteString(arrayRefFuncName(t))
+	b.WriteString("(value ")
+	b.WriteString(goType(t))
+	b.WriteString(") ")
+	b.WriteString(abiType(t))
+	b.WriteString(" {\n")
+	b.WriteString("\tvar out ")
+	b.WriteString(abiType(t))
+	b.WriteString("\n\tfor i := range value {\n\t\tout[i] = ")
+	b.WriteString(arrayRefElemExpr(*t.Elem, "value[i]"))
+	b.WriteString("\n\t}\n\treturn out\n}\n\n")
+	return b.String()
+}
+
+func renderArrayOwnHelper(t model.TypeRef) string {
+	var b strings.Builder
+	b.WriteString("func ")
+	b.WriteString(arrayOwnFuncName(t))
+	b.WriteString("(rt *_go2zigRuntime, value ")
+	b.WriteString(abiType(t))
+	b.WriteString(") ")
+	b.WriteString(goType(t))
+	b.WriteString(" {\n")
+	b.WriteString("\tvar out ")
+	b.WriteString(goType(t))
+	b.WriteString("\n\tfor i := range value {\n\t\tout[i] = ")
+	b.WriteString(arrayOwnElemExpr(*t.Elem, "rt", "value[i]"))
+	b.WriteString("\n\t}\n\treturn out\n}\n\n")
+	return b.String()
+}
+
+func arrayRefElemExpr(t model.TypeRef, expr string) string {
+	switch t.Kind {
+	case model.TypeArray:
+		return arrayRefFuncName(t) + "(" + expr + ")"
+	default:
+		return refExpr(t, expr)
+	}
+}
+
+func arrayOwnElemExpr(t model.TypeRef, rtName, expr string) string {
+	switch t.Kind {
+	case model.TypeArray:
+		return arrayOwnFuncName(t) + "(" + rtName + ", " + expr + ")"
+	default:
+		return ownExprRT(rtName, t, expr)
+	}
+}
+
+func arrayRefFuncName(t model.TypeRef) string {
+	return "_go2zigRefArray_" + sanitizeTypeKey(t.Key())
+}
+
+func arrayOwnFuncName(t model.TypeRef) string {
+	return "_go2zigOwnArray_" + sanitizeTypeKey(t.Key())
+}
+
+func sanitizeTypeKey(key string) string {
+	var b strings.Builder
+	for _, r := range key {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
