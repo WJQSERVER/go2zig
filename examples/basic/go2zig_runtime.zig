@@ -2,6 +2,11 @@
 const std = @import("std");
 const api = @import("api.zig");
 
+pub const ErrorInfo = extern struct {
+    code: u32,
+    text: api.String,
+};
+
 pub inline fn asSlice(value: api.String) []const u8 {
     if (value.len == 0) return "";
     return value.ptr[0..value.len];
@@ -30,4 +35,15 @@ pub fn freeBuf(ptr: ?*anyopaque, len: usize) void {
     if (len == 0 or ptr == null) return;
     const buf = @as([*]u8, @ptrCast(ptr.?))[0..len];
     std.heap.smp_allocator.free(buf);
+}
+
+pub fn okError() ErrorInfo {
+    return .{ .code = 0, .text = .{ .ptr = undefined, .len = 0 } };
+}
+
+pub fn makeError(err: anyerror) ErrorInfo {
+    return .{
+        .code = @intFromError(err),
+        .text = ownString(@errorName(err)),
+    };
 }

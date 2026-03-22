@@ -24,6 +24,21 @@ pub export fn go2zig_call_login(frame: *Go2ZigCallLogin) void {
     frame.out = impl.login(frame.req);
 }
 
+pub const Go2ZigCallLoginChecked = extern struct {
+    req: api.LoginRequest,
+    out: api.LoginResponse,
+    err: rt.ErrorInfo,
+};
+
+pub export fn go2zig_call_login_checked(frame: *Go2ZigCallLoginChecked) void {
+    frame.err = rt.okError();
+    const result = impl.login_checked(frame.req) catch |err| {
+        frame.err = rt.makeError(err);
+        return;
+    };
+    frame.out = result;
+}
+
 pub const Go2ZigCallRenameUser = extern struct {
     user: api.User,
     next_name: api.String,
