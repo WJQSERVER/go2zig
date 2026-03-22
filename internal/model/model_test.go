@@ -219,6 +219,19 @@ func TestTypeNeedsKeepAliveForNestedSliceFields(t *testing.T) {
 	}
 }
 
+func TestNewRejectsDynamicLeafSliceAliases(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(nil, nil, []*Slice{{Name: "StringList", Elem: TypeRef{Kind: TypeString, Raw: "String", Name: "String"}}}, nil, nil)
+	if err == nil {
+		t.Fatal("New() error = nil, want unsupported String slice error")
+	}
+	_, err = New(nil, nil, []*Slice{{Name: "BytesList", Elem: TypeRef{Kind: TypeBytes, Raw: "Bytes", Name: "Bytes"}}}, nil, nil)
+	if err == nil {
+		t.Fatal("New() error = nil, want unsupported Bytes slice error")
+	}
+}
+
 func TestStructSliceElemSupportMatrix(t *testing.T) {
 	t.Parallel()
 

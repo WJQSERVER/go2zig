@@ -95,3 +95,20 @@ func TestParseResolvesArrayAliasInsideSlice(t *testing.T) {
 		t.Fatalf("duplicate return element alias = %q, want Digest", got)
 	}
 }
+
+func TestParseRejectsStringSliceAlias(t *testing.T) {
+	t.Parallel()
+
+	_, err := Parse(`
+        pub const StringList = extern struct {
+            ptr: ?[*]const String,
+            len: usize,
+        };
+    `)
+	if err == nil {
+		t.Fatal("Parse() error = nil, want unsupported slice element error")
+	}
+	if !strings.Contains(err.Error(), "unsupported element type") {
+		t.Fatalf("Parse() error = %q, want unsupported element type message", err)
+	}
+}

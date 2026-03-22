@@ -356,6 +356,26 @@ func TestGenerateValidatesRequiredFields(t *testing.T) {
 	}
 }
 
+func TestGenerateRejectsUnsupportedStringSliceAlias(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, `
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        pub const StringList = extern struct { ptr: ?[*]const String, len: usize, };
+        pub extern fn bad(values: StringList) void;
+    `)
+	err := Generate(GenerateConfig{API: apiPath, Output: outPath, PackageName: "sample", LibraryName: "sample"})
+	if err == nil {
+		t.Fatal("Generate() error = nil, want unsupported slice element error")
+	}
+	if !strings.Contains(err.Error(), "unsupported element type") {
+		t.Fatalf("Generate() error = %q, want unsupported element type message", err)
+	}
+}
+
 func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	zigPath, err := exec.LookPath("zig")
 	if err != nil {
@@ -557,6 +577,46 @@ func main() {
 	}
 	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|9|2|true|8|11|9|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
+	}
+}
+
+func TestBuilderGeneratedProgramFailsWithoutLibrary(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		t.Skip("missing-library runtime test currently targets windows/amd64")
+	}
+	if _, err := exec.LookPath("zig"); err != nil {
+		t.Skip("zig not available in PATH")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/missing\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "api.zig"), integrationAPI)
+	writeFile(t, filepath.Join(dir, "lib.zig"), integrationLib)
+	outPath := filepath.Join(dir, "gen.go")
+	if err := NewBuilder().WithAPI(filepath.Join(dir, "api.zig")).WithZigSource(filepath.Join(dir, "lib.zig")).WithOutput(outPath).WithPackageName("main").WithLibraryName("sample").Build(); err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+	libPath := filepath.Join(dir, outputLibraryFilename("sample", true))
+	if err := os.Remove(libPath); err != nil {
+		t.Fatalf("Remove(%s) error = %v", libPath, err)
+	}
+	writeFile(t, filepath.Join(dir, "main.go"), `package main
+
+func main() {
+	if err := Default.Load(); err != nil {
+		panic(err)
+	}
+}
+`)
+	cmd := exec.Command("go", "run", ".")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("go run succeeded unexpectedly\n%s", out)
+	}
+	if !strings.Contains(string(out), "go2zig: load") {
+		t.Fatalf("go run output = %q, want load failure", out)
 	}
 }
 

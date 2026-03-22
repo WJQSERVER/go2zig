@@ -196,6 +196,9 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias
 		if err := api.resolveType(&item.Elem, "slice "+item.Name); err != nil {
 			return nil, err
 		}
+		if item.Elem.Kind == TypeString || item.Elem.Kind == TypeBytes {
+			return nil, fmt.Errorf("slice %q uses unsupported element type %q", item.Name, item.Elem.TypeName())
+		}
 		if !api.SupportsSliceElem(item.Elem) {
 			return nil, fmt.Errorf("slice %q uses unsupported element type %q", item.Name, item.Elem.TypeName())
 		}
