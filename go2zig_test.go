@@ -144,6 +144,17 @@ func TestGenerateWritesGoFile(t *testing.T) {
 	}
 }
 
+func TestGenerateValidatesRequiredFields(t *testing.T) {
+	t.Parallel()
+
+	if err := Generate(GenerateConfig{}); err == nil || !strings.Contains(err.Error(), "api path is required") {
+		t.Fatalf("Generate() error = %v, want api path validation", err)
+	}
+	if err := Generate(GenerateConfig{API: "api.zig"}); err == nil || !strings.Contains(err.Error(), "output path is required") {
+		t.Fatalf("Generate() error = %v, want output path validation", err)
+	}
+}
+
 func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	zigPath, err := exec.LookPath("zig")
 	if err != nil {
@@ -188,6 +199,48 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)") {
 		t.Fatalf("generated file missing error-return wrapper\n%s", string(content))
+	}
+}
+
+func TestBuilderGenerateOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, integrationAPI)
+
+	if err := NewBuilder().
+		WithAPI(apiPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		Build(); err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	for _, path := range []string{
+		outPath,
+		filepath.Join(dir, "go2zig_runtime.zig"),
+		filepath.Join(dir, "go2zig_exports.zig"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected generated file missing %s: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, outputLibraryFilename("sample", true))); !os.IsNotExist(err) {
+		t.Fatalf("dynamic library should not exist in generate-only mode, stat error = %v", err)
+	}
+}
+
+func TestBuilderValidatesRequiredFields(t *testing.T) {
+	t.Parallel()
+
+	if err := NewBuilder().Build(); err == nil || !strings.Contains(err.Error(), "output path is required") {
+		t.Fatalf("Build() error = %v, want output path validation", err)
+	}
+	if err := NewBuilder().WithOutput("gen.go").Build(); err == nil || !strings.Contains(err.Error(), "api path or zig source path is required") {
+		t.Fatalf("Build() error = %v, want api/zig path validation", err)
 	}
 }
 

@@ -10,6 +10,8 @@
 
 当前版本先聚焦单向调用：Go 调 Zig。
 
+更多细节见 `docs/README.md`，如果你想按步骤落地，可以直接看 `docs/usage.md`。
+
 ## 当前进展
 
 - 已完成 `windows/amd64` 与 `linux/amd64` 下无 `cgo` 的底层调用运行时：`asmcall` + 动态库符号加载

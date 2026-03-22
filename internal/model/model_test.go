@@ -46,3 +46,36 @@ func TestSortedStructsRejectsCycle(t *testing.T) {
 		t.Fatal("SortedStructs() error = nil, want cycle error")
 	}
 }
+
+func TestTypeNeedsAllocationAndArena(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		[]*Struct{
+			{Name: "User", Fields: []Field{{Name: "name", Type: TypeRef{Kind: TypeString, Name: "String", Raw: "String"}}}},
+			{Name: "Wrapper", Fields: []Field{{Name: "user", Type: TypeRef{Kind: TypeStruct, Name: "User", Raw: "User"}}}},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if !api.TypeNeedsAllocation(TypeRef{Kind: TypeStruct, Name: "User", Raw: "User"}) {
+		t.Fatal("TypeNeedsAllocation(User) = false, want true")
+	}
+	if !api.TypeNeedsFree(TypeRef{Kind: TypeStruct, Name: "Wrapper", Raw: "Wrapper"}) {
+		t.Fatal("TypeNeedsFree(Wrapper) = false, want true")
+	}
+	if api.TypeNeedsAllocation(TypeRef{Kind: TypePrimitive, Name: "u64", Raw: "u64", Primitive: PrimitiveInfo{Go: "uint64"}}) {
+		t.Fatal("TypeNeedsAllocation(u64) = true, want false")
+	}
+
+	fn := &Function{
+		Name:   "rename_user",
+		Params: []Field{{Name: "user", Type: TypeRef{Kind: TypeStruct, Name: "Wrapper", Raw: "Wrapper"}}},
+	}
+	if !api.FunctionNeedsArena(fn) {
+		t.Fatal("FunctionNeedsArena(rename_user) = false, want true")
+	}
+}

@@ -111,3 +111,45 @@ func TestParseRejectsUnknownType(t *testing.T) {
 		t.Fatalf("Parse() error = %q, want unknown type message", err)
 	}
 }
+
+func TestParseSupportsVoidAndInlineErrorUnion(t *testing.T) {
+	t.Parallel()
+
+	api, err := Parse(`
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        pub extern fn ping() void;
+        pub extern fn risky() error{Boom}!String;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(api.Funcs) != 2 {
+		t.Fatalf("Parse() funcs = %d, want 2", len(api.Funcs))
+	}
+	if got := api.Funcs[0].Return.Kind; got != model.TypeVoid {
+		t.Fatalf("ping return kind = %v, want void", got)
+	}
+	if !api.Funcs[1].CanErr {
+		t.Fatal("risky should be marked CanErr")
+	}
+	if got := api.Funcs[1].Return.Kind; got != model.TypeString {
+		t.Fatalf("risky payload kind = %v, want string", got)
+	}
+}
+
+func TestParseRejectsDuplicateField(t *testing.T) {
+	t.Parallel()
+
+	_, err := Parse(`
+        pub const User = extern struct {
+            id: u64,
+            id: u32,
+        };
+    `)
+	if err == nil {
+		t.Fatal("Parse() error = nil, want duplicate field error")
+	}
+	if !strings.Contains(err.Error(), "duplicate field") {
+		t.Fatalf("Parse() error = %q, want duplicate field message", err)
+	}
+}

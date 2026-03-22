@@ -77,3 +77,53 @@ func TestRender(t *testing.T) {
 		t.Fatalf("RenderZigBridge() missing free bridge\n%s", bridgeText)
 	}
 }
+
+func TestRenderVoidErrorFunction(t *testing.T) {
+	t.Parallel()
+
+	api, err := parser.Parse(`
+        pub const FlushError = error{ Broken };
+        pub extern fn flush() FlushError!void;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	out, err := Render(api, Config{PackageName: "basic", LibraryName: "basic", APIModule: "api.zig", ImplModule: "lib.zig"})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	content := string(out)
+	if !strings.Contains(content, "func (c *Go2ZigClient) Flush() error") {
+		t.Fatalf("Render() missing void error signature\n%s", content)
+	}
+	if strings.Contains(content, "func (c *Go2ZigClient) Flush() (struct{}, error)") {
+		t.Fatalf("Render() produced invalid void error signature\n%s", content)
+	}
+
+	bridgeText := string(RenderZigBridge(api, Config{APIModule: "api.zig", ImplModule: "lib.zig"}))
+	if strings.Contains(bridgeText, "frame.out = result") {
+		t.Fatalf("RenderZigBridge() should not assign out for void payload\n%s", bridgeText)
+	}
+	if !strings.Contains(bridgeText, "frame.err = rt.makeError(err)") {
+		t.Fatalf("RenderZigBridge() missing error assignment\n%s", bridgeText)
+	}
+}
+
+func TestDynamicLibraryFilename(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		goos string
+		want string
+	}{
+		{goos: "windows", want: "basic.dll"},
+		{goos: "linux", want: "libbasic.so"},
+		{goos: "darwin", want: "libbasic.dylib"},
+	}
+	for _, tt := range tests {
+		if got := DynamicLibraryFilename("basic", tt.goos); got != tt.want {
+			t.Fatalf("DynamicLibraryFilename(%q) = %q, want %q", tt.goos, got, tt.want)
+		}
+	}
+}
