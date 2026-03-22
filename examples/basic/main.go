@@ -69,9 +69,10 @@ func main() {
 		Scores: [3]uint16{3, 5, 8},
 	}, UserKindAdmin, [3]uint16{13, 21, 34})
 	digest := DigestName("alice")
+	scaled := ScaleScores(ScoreList{2, 4, 6}, 3)
 
 	fmt.Printf("login ok=%v message=%q token=%q\n", resp.OK, resp.Message, string(resp.Token))
 	fmt.Printf("checked login ok=%v message=%q\n", checked.OK, checked.Message)
 	fmt.Printf("renamed user=%+v\n", renamed)
-	fmt.Printf("promoted kind=%d scores=%v digest=%v\n", promoted.Kind, promoted.Scores, digest)
+	fmt.Printf("promoted kind=%d scores=%v digest=%v scaled=%v\n", promoted.Kind, promoted.Scores, digest, scaled)
 }

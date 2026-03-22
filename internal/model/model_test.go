@@ -12,6 +12,7 @@ func TestSortedStructs(t *testing.T) {
 		},
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -39,6 +40,7 @@ func TestSortedStructsRejectsCycle(t *testing.T) {
 		},
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -57,6 +59,7 @@ func TestTypeNeedsAllocationAndArena(t *testing.T) {
 			{Name: "User", Fields: []Field{{Name: "name", Type: TypeRef{Kind: TypeString, Name: "String", Raw: "String"}}}},
 			{Name: "Wrapper", Fields: []Field{{Name: "user", Type: TypeRef{Kind: TypeStruct, Name: "User", Raw: "User"}}}},
 		},
+		nil,
 		nil,
 		nil,
 	)
@@ -95,6 +98,7 @@ func TestNewResolvesEnumsAndArrays(t *testing.T) {
 			},
 		}},
 		[]*Enum{{Name: "UserKind", BaseName: "u8", Values: []EnumValue{{Name: "guest"}, {Name: "member"}}}},
+		nil,
 		[]*Function{{Name: "digest", Return: TypeRef{Kind: TypeArray, Raw: "[3]UserKind", ArrayLen: 3, Elem: &TypeRef{Kind: TypeStruct, Name: "UserKind", Raw: "UserKind"}}}},
 	)
 	if err != nil {
@@ -105,5 +109,28 @@ func TestNewResolvesEnumsAndArrays(t *testing.T) {
 	}
 	if got := api.Funcs[0].Return.Elem.Kind; got != TypeEnum {
 		t.Fatalf("digest elem kind = %v, want enum", got)
+	}
+}
+
+func TestNewResolvesPODSliceAliases(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		nil,
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}},
+		[]*Function{{Name: "scale_scores", Params: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}, Return: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}},
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := api.Funcs[0].Params[0].Type.Kind; got != TypeSlice {
+		t.Fatalf("scale_scores param kind = %v, want slice", got)
+	}
+	if !api.TypeNeedsFree(api.Funcs[0].Return) {
+		t.Fatal("slice return should require free")
+	}
+	if api.FunctionNeedsArena(api.Funcs[0]) {
+		t.Fatal("POD slice params should not require arena allocation")
 	}
 }

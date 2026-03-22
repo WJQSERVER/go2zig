@@ -69,3 +69,13 @@ pub export fn go2zig_call_digest_name(frame: *Go2ZigCallDigestName) void {
     frame.out = impl.digest_name(frame.name);
 }
 
+pub const Go2ZigCallScaleScores = extern struct {
+    scores: api.ScoreList,
+    factor: u16,
+    out: api.ScoreList,
+};
+
+pub export fn go2zig_call_scale_scores(frame: *Go2ZigCallScaleScores) void {
+    frame.out = impl.scale_scores(frame.scores, frame.factor);
+}
+

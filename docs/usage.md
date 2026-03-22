@@ -59,6 +59,7 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 
 - `String` 和 `Bytes` 是约定好的桥接类型别名
 - 可以声明 `enum(u8)`、`enum(u16)`、`enum(u32)` 等整型枚举
+- 可以声明 POD 切片别名，例如 `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`
 - 可以声明固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]UserKind`
 - 业务 struct 用 `extern struct`
 - 函数声明用 `pub extern fn`
@@ -147,6 +148,7 @@ _ = resp
 对于新增支持的类型：
 
 - Zig `enum(u8)` 会生成 Go 命名类型和对应常量
+- POD 切片别名会生成 Go `[]T` 命名别名，并自动做零拷贝入参 / 拷贝出参转换
 - Zig `[N]T` 会生成 Go `[N]T` 数组，并自动做 ABI 转换
 
 ## 6. 自定义动态库路径

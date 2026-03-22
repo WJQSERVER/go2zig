@@ -13,6 +13,7 @@ func TestRender(t *testing.T) {
 	api, err := parser.Parse(`
 		pub const String = extern struct { ptr: [*]const u8, len: usize, };
 		pub const Bytes = extern struct { ptr: [*]const u8, len: usize, };
+		pub const ScoreList = extern struct { ptr: ?[*]const u16, len: usize, };
 		pub const UserKind = enum(u8) { guest, member, admin };
         pub const User = extern struct {
             id: u64,
@@ -38,6 +39,7 @@ func TestRender(t *testing.T) {
 		pub extern fn rename_user(user: User, next_name: String) User;
 		pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
 		pub extern fn digest_name(name: String) [4]u8;
+		pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 	`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -55,6 +57,7 @@ func TestRender(t *testing.T) {
 		"package basic",
 		"type Go2ZigClient struct",
 		"type UserKind uint8",
+		"type ScoreList []uint16",
 		"UserKindAdmin",
 		"func NewGo2ZigClient(path string) *Go2ZigClient",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
@@ -63,6 +66,8 @@ func TestRender(t *testing.T) {
 		"func (c *Go2ZigClient) RenameUser(user User, nextName string) User",
 		"func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User",
 		"func (c *Go2ZigClient) DigestName(name string) [4]uint8",
+		"func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList",
+		"func _go2zigRefScoreList(value ScoreList) _go2zigScoreList",
 		"func _go2zigRefArray_",
 		"go2zig_call_login",
 		"type Go2ZigError struct",
@@ -73,7 +78,7 @@ func TestRender(t *testing.T) {
 		}
 	}
 
-	runtimeText := string(RenderZigRuntime(Config{APIModule: "api.zig"}))
+	runtimeText := string(RenderZigRuntime(api, Config{APIModule: "api.zig"}))
 	if !strings.Contains(runtimeText, "std.heap.smp_allocator") {
 		t.Fatalf("RenderZigRuntime() should use smp_allocator\n%s", runtimeText)
 	}

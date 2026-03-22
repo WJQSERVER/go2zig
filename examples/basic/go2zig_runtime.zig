@@ -47,3 +47,15 @@ pub fn makeError(err: anyerror) ErrorInfo {
         .text = ownString(@errorName(err)),
     };
 }
+
+pub inline fn asScoreList(value: api.ScoreList) []const u16 {
+    if (value.ptr == null or value.len == 0) return &.{};
+    return value.ptr.?[0..value.len];
+}
+
+pub fn ownScoreList(value: []const u16) api.ScoreList {
+    if (value.len == 0) return .{ .ptr = null, .len = 0 };
+    const buf = std.heap.smp_allocator.alloc(u16, value.len) catch @panic("go2zig: alloc slice failed");
+    @memcpy(buf, value);
+    return .{ .ptr = buf.ptr, .len = buf.len };
+}

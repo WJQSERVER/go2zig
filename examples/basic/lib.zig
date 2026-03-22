@@ -62,3 +62,13 @@ pub fn digest_name(name: api.String) [4]u8 {
         0xCD,
     };
 }
+
+pub fn scale_scores(scores: api.ScoreList, factor: u16) api.ScoreList {
+    const items = rt.asScoreList(scores);
+    var out = std.heap.page_allocator.alloc(u16, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |value, i| {
+        out[i] = value * factor;
+    }
+    return rt.ownScoreList(out);
+}

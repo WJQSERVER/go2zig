@@ -59,6 +59,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 除了基础类型、`String`、`Bytes`、struct 之外，当前还支持：
 
 - 整型底层的 Zig 枚举，例如 `enum(u8)`、`enum(u16)`
+- POD 切片别名，例如 `extern struct { ptr: ?[*]const u16, len: usize }`
 - 固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]UserKind`
 
 数组桥接当前走逐元素转换 helper，这样可以：

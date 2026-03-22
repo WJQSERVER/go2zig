@@ -8,6 +8,11 @@ pub const Bytes = extern struct {
     len: usize,
 };
 
+pub const ScoreList = extern struct {
+    ptr: ?[*]const u16,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -44,3 +49,4 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
 pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
 pub extern fn digest_name(name: String) [4]u8;
+pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;

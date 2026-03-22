@@ -20,6 +20,11 @@ pub const Bytes = extern struct {
     len: usize,
 };
 
+pub const ScoreList = extern struct {
+    ptr: ?[*]const u16,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -56,6 +61,7 @@ pub extern fn rename_user(user: User, next_name: String) User;
 pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
 pub extern fn digest_name(name: String) [4]u8;
+pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 `
 
 const integrationLib = `
@@ -116,6 +122,16 @@ pub fn digest_name(name: api.String) [4]u8 {
         0xCD,
     };
 }
+
+pub fn scale_scores(scores: api.ScoreList, factor: u16) api.ScoreList {
+    const items = rt.asScoreList(scores);
+    var out = std.heap.page_allocator.alloc(u16, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |value, i| {
+        out[i] = value * factor;
+    }
+    return rt.ownScoreList(out);
+}
 `
 
 func TestGenerateWritesGoFile(t *testing.T) {
@@ -149,12 +165,14 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"package sample",
 		"type Go2ZigClient struct",
 		"type UserKind uint8",
+		"type ScoreList []uint16",
 		"var Default = NewGo2ZigClient(\"\")",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
 		"func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)",
 		"func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User",
 		"func (c *Go2ZigClient) DigestName(name string) [4]uint8",
+		"func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -240,6 +258,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User") {
 		t.Fatalf("generated file missing enum/array wrapper\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList") {
+		t.Fatalf("generated file missing slice wrapper\n%s", string(content))
 	}
 }
 
@@ -330,6 +351,7 @@ func main() {
 	renamed := RenameUser(User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, "ally")
 	promoted := PromoteUser(User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, UserKindAdmin, [3]uint16{13, 21, 34})
 	digest := DigestName("alice")
+	scaled := ScaleScores(ScoreList{2, 4, 6}, 3)
 	checked, err := LoginChecked(LoginRequest{
 		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
@@ -344,7 +366,7 @@ func main() {
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], checked.Message, err != nil)
 }
 `)
 
@@ -355,7 +377,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }

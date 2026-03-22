@@ -13,6 +13,7 @@ import (
 var (
 	structPattern = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{(.*?)\}\s*;`)
 	enumPattern   = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*enum\s*\(([^)]+)\)\s*\{(.*?)\}\s*;`)
+	slicePattern  = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{\s*ptr\s*:\s*\?\s*\[\*\]const\s+([^,]+),\s*len\s*:\s*usize\s*,?\s*\}\s*;`)
 	funcPattern   = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
 	arrayPattern  = regexp.MustCompile(`^\[(\d+)\](.+)$`)
 )
@@ -35,18 +36,22 @@ func Parse(content string) (*model.API, error) {
 	if err != nil {
 		return nil, err
 	}
+	slices, err := parseSlices(clean)
+	if err != nil {
+		return nil, err
+	}
 	funcs, err := parseFunctions(clean)
 	if err != nil {
 		return nil, err
 	}
-	return model.New(structs, enums, funcs)
+	return model.New(structs, enums, slices, funcs)
 }
 
 func parseStructs(content string) ([]*model.Struct, error) {
 	matches := structPattern.FindAllStringSubmatch(content, -1)
 	structs := make([]*model.Struct, 0, len(matches))
 	for _, match := range matches {
-		if match[1] == "String" || match[1] == "Bytes" {
+		if match[1] == "String" || match[1] == "Bytes" || isSliceStruct(match[2]) {
 			continue
 		}
 		fields, err := parseFields(match[2])
@@ -69,6 +74,31 @@ func parseEnums(content string) ([]*model.Enum, error) {
 		enums = append(enums, &model.Enum{Name: match[1], BaseName: strings.TrimSpace(match[2]), Values: values})
 	}
 	return enums, nil
+}
+
+func parseSlices(content string) ([]*model.Slice, error) {
+	matches := slicePattern.FindAllStringSubmatch(content, -1)
+	slices := make([]*model.Slice, 0, len(matches))
+	for _, match := range matches {
+		name := match[1]
+		if name == "String" || name == "Bytes" {
+			continue
+		}
+		elem, err := parseType(strings.TrimSpace(match[2]))
+		if err != nil {
+			return nil, fmt.Errorf("parse slice %q: %w", name, err)
+		}
+		slices = append(slices, &model.Slice{Name: name, Elem: elem})
+	}
+	return slices, nil
+}
+
+func isSliceStruct(body string) bool {
+	body = strings.TrimSpace(body)
+	compact := strings.ReplaceAll(body, " ", "")
+	compact = strings.ReplaceAll(compact, "\n", "")
+	compact = strings.ReplaceAll(compact, "\t", "")
+	return strings.HasPrefix(compact, "ptr:?[*]const") && strings.Contains(compact, ",len:usize")
 }
 
 func parseEnumValues(body string) ([]model.EnumValue, error) {

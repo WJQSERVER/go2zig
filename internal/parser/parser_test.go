@@ -19,6 +19,11 @@ pub const Bytes = extern struct {
     len: usize,
 };
 
+pub const ScoreList = extern struct {
+    ptr: ?[*]const u16,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -58,6 +63,7 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
 pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
 pub extern fn digest_name(name: String) [4]u8;
+pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 `
 
 func TestParse(t *testing.T) {
@@ -74,8 +80,11 @@ func TestParse(t *testing.T) {
 	if len(api.Enums) != 1 {
 		t.Fatalf("Parse() enums = %d, want 1", len(api.Enums))
 	}
-	if len(api.Funcs) != 6 {
-		t.Fatalf("Parse() funcs = %d, want 6", len(api.Funcs))
+	if len(api.Slices) != 1 {
+		t.Fatalf("Parse() slices = %d, want 1", len(api.Slices))
+	}
+	if len(api.Funcs) != 7 {
+		t.Fatalf("Parse() funcs = %d, want 7", len(api.Funcs))
 	}
 
 	if api.Struct("String") != nil || api.Struct("Bytes") != nil {
@@ -119,6 +128,9 @@ func TestParse(t *testing.T) {
 	}
 	if got := api.Funcs[5].Return.Kind; got != model.TypeArray {
 		t.Fatalf("digest_name return kind = %v, want array", got)
+	}
+	if got := api.Funcs[6].Params[0].Type.Kind; got != model.TypeSlice {
+		t.Fatalf("scale_scores first param kind = %v, want slice", got)
 	}
 }
 

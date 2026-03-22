@@ -85,4 +85,9 @@ func TestExampleAPI(t *testing.T) {
 	if digest != [4]uint8{'a', 5, 0xAB, 0xCD} {
 		t.Fatalf("DigestName() digest = %v, want %v", digest, [4]uint8{'a', 5, 0xAB, 0xCD})
 	}
+
+	scaled := ScaleScores(ScoreList{2, 4, 6}, 3)
+	if len(scaled) != 3 || scaled[0] != 6 || scaled[2] != 18 {
+		t.Fatalf("ScaleScores() result = %v, want [6 12 18]", scaled)
+	}
 }

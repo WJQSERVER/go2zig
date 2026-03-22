@@ -35,6 +35,7 @@ type _go2zigRuntime struct {
 	procRenameUser   uintptr
 	procPromoteUser  uintptr
 	procDigestName   uintptr
+	procScaleScores  uintptr
 	err              error
 }
 
@@ -76,6 +77,10 @@ func (rt *_go2zigRuntime) Load() error {
 		}
 		if rt.procDigestName, err = lib.Lookup("go2zig_call_digest_name"); err != nil {
 			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_digest_name: %w", err)
+			return
+		}
+		if rt.procScaleScores, err = lib.Lookup("go2zig_call_scale_scores"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_scale_scores: %w", err)
 			return
 		}
 	})
@@ -211,6 +216,29 @@ const (
 	UserKindMember UserKind = UserKind(1)
 	UserKindAdmin  UserKind = UserKind(2)
 )
+
+type ScoreList []uint16
+
+type _go2zigScoreList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+func _go2zigRefScoreList(value ScoreList) _go2zigScoreList {
+	if len(value) == 0 {
+		return _go2zigScoreList{}
+	}
+	return _go2zigScoreList{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}
+}
+
+func _go2zigOwnScoreList(rt *_go2zigRuntime, value _go2zigScoreList) ScoreList {
+	if value.ptr == nil || value.len == 0 {
+		return nil
+	}
+	ret := append(ScoreList(nil), unsafe.Slice((*uint16)(value.ptr), int(value.len))...)
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(uint16(0))))
+	return ret
+}
 
 func _go2zigRefArray_array_3_1_u16(value [3]uint16) [3]uint16 {
 	var out [3]uint16
@@ -369,6 +397,12 @@ type _go2zigCallDigestName struct {
 	out  [4]uint8
 }
 
+type _go2zigCallScaleScores struct {
+	scores _go2zigScoreList
+	factor uint16
+	out    _go2zigScoreList
+}
+
 func (c *Go2ZigClient) Health() bool {
 	var frame _go2zigCallHealth
 	c.rt.call(c.rt.procHealth, unsafe.Pointer(&frame))
@@ -447,4 +481,18 @@ func (c *Go2ZigClient) DigestName(name string) [4]uint8 {
 
 func DigestName(name string) [4]uint8 {
 	return Default.DigestName(name)
+}
+
+func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList {
+	var frame _go2zigCallScaleScores
+	frame.scores = _go2zigRefScoreList(scores)
+	frame.factor = uint16(factor)
+	c.rt.call(c.rt.procScaleScores, unsafe.Pointer(&frame))
+	runtime.KeepAlive(scores)
+	runtime.KeepAlive(factor)
+	return _go2zigOwnScoreList(c.rt, frame.out)
+}
+
+func ScaleScores(scores ScoreList, factor uint16) ScoreList {
+	return Default.ScaleScores(scores, factor)
 }
