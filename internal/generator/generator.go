@@ -168,6 +168,10 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 		body.WriteString(renderPublicEnum(item))
 	}
 
+	for _, item := range api.Arrays {
+		body.WriteString(renderPublicArrayAlias(item))
+	}
+
 	for _, item := range api.Slices {
 		body.WriteString(renderPublicSlice(item))
 		body.WriteString(renderABISlice(item))
@@ -762,6 +766,9 @@ func goType(t model.TypeRef) string {
 		if t.Elem == nil {
 			return t.Raw
 		}
+		if t.Alias != "" {
+			return t.Alias
+		}
 		return fmt.Sprintf("[%d]%s", t.ArrayLen, goType(*t.Elem))
 	case model.TypeStruct:
 		return t.Name
@@ -812,6 +819,9 @@ func zigType(t model.TypeRef) string {
 	case model.TypeArray:
 		if t.Elem == nil {
 			return t.Raw
+		}
+		if t.Alias != "" {
+			return "api." + t.Alias
 		}
 		return fmt.Sprintf("[%d]%s", t.ArrayLen, zigType(*t.Elem))
 	default:
@@ -911,6 +921,16 @@ func renderPublicEnum(item *model.Enum) string {
 		b.WriteString("\n")
 	}
 	b.WriteString(")\n\n")
+	return b.String()
+}
+
+func renderPublicArrayAlias(item *model.ArrayAlias) string {
+	var b strings.Builder
+	b.WriteString("type ")
+	b.WriteString(item.Name)
+	b.WriteString(" ")
+	b.WriteString(fmt.Sprintf("[%d]%s", item.Type.ArrayLen, goType(*item.Type.Elem)))
+	b.WriteString("\n\n")
 	return b.String()
 }
 
@@ -1074,6 +1094,9 @@ func collectArrayTypes(api *model.API) []model.TypeRef {
 	}
 	for _, item := range api.Slices {
 		walk(item.Elem)
+	}
+	for _, item := range api.Arrays {
+		walk(item.Type)
 	}
 	keys := make([]string, 0, len(seen))
 	for key := range seen {

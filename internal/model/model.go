@@ -47,6 +47,7 @@ type TypeRef struct {
 	Kind      TypeKind
 	Raw       string
 	Name      string
+	Alias     string
 	Primitive PrimitiveInfo
 	Elem      *TypeRef
 	ArrayLen  int
@@ -79,6 +80,11 @@ type Slice struct {
 	Elem TypeRef
 }
 
+type ArrayAlias struct {
+	Name string
+	Type TypeRef
+}
+
 type Function struct {
 	Name   string
 	Params []Field
@@ -90,14 +96,16 @@ type API struct {
 	Structs []*Struct
 	Enums   []*Enum
 	Slices  []*Slice
+	Arrays  []*ArrayAlias
 	Funcs   []*Function
 
 	structByName map[string]*Struct
 	enumByName   map[string]*Enum
 	sliceByName  map[string]*Slice
+	arrayByName  map[string]*ArrayAlias
 }
 
-func New(structs []*Struct, enums []*Enum, slices []*Slice, funcs []*Function) (*API, error) {
+func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias, funcs []*Function) (*API, error) {
 	structByName := make(map[string]*Struct, len(structs))
 	for _, item := range structs {
 		if _, ok := structByName[item.Name]; ok {
@@ -136,14 +144,33 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, funcs []*Function) (
 		sliceByName[item.Name] = item
 	}
 
+	arrayByName := make(map[string]*ArrayAlias, len(arrays))
+	for _, item := range arrays {
+		if _, ok := structByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := enumByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := sliceByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := arrayByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate array alias %q", item.Name)
+		}
+		arrayByName[item.Name] = item
+	}
+
 	api := &API{
 		Structs:      structs,
 		Enums:        enums,
 		Slices:       slices,
+		Arrays:       arrays,
 		Funcs:        funcs,
 		structByName: structByName,
 		enumByName:   enumByName,
 		sliceByName:  sliceByName,
+		arrayByName:  arrayByName,
 	}
 
 	for _, item := range structs {
@@ -152,6 +179,16 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, funcs []*Function) (
 				return nil, err
 			}
 		}
+	}
+
+	for _, item := range arrays {
+		if err := api.resolveType(&item.Type, "array alias "+item.Name); err != nil {
+			return nil, err
+		}
+		if item.Type.Kind != TypeArray {
+			return nil, fmt.Errorf("array alias %q must reference an array type", item.Name)
+		}
+		item.Type.Alias = item.Name
 	}
 
 	for _, item := range slices {
@@ -192,6 +229,11 @@ func (a *API) resolveType(t *TypeRef, owner string) error {
 			t.Kind = TypeSlice
 			elem := slice.Elem.Clone()
 			t.Elem = &elem
+			return nil
+		}
+		if array, ok := a.arrayByName[t.Name]; ok {
+			copy := array.Type.Clone()
+			*t = copy
 			return nil
 		}
 		return fmt.Errorf("%s uses unknown type %q", owner, t.Name)
@@ -240,6 +282,9 @@ func (t TypeRef) TypeName() string {
 	case TypeSlice:
 		return t.Name
 	case TypeArray:
+		if t.Alias != "" {
+			return t.Alias
+		}
 		if t.Elem == nil {
 			return t.Raw
 		}
@@ -257,6 +302,9 @@ func (t TypeRef) Key() string {
 		}
 		return fmt.Sprintf("slice:%s", t.Elem.Key())
 	case TypeArray:
+		if t.Alias != "" {
+			return "arrayalias:" + t.Alias
+		}
 		if t.Elem == nil {
 			return strings.TrimSpace(t.Raw)
 		}
@@ -276,6 +324,10 @@ func (a *API) Enum(name string) *Enum {
 
 func (a *API) Slice(name string) *Slice {
 	return a.sliceByName[name]
+}
+
+func (a *API) ArrayAlias(name string) *ArrayAlias {
+	return a.arrayByName[name]
 }
 
 func (a *API) StructNeedsAllocation(name string) bool {

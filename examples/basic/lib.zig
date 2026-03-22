@@ -53,7 +53,7 @@ pub fn promote_user(user: api.User, next_kind: api.UserKind, next_scores: [3]u16
     };
 }
 
-pub fn digest_name(name: api.String) [4]u8 {
+pub fn digest_name(name: api.String) api.Digest {
     const value = rt.asSlice(name);
     return .{
         if (value.len > 0) value[0] else 0,

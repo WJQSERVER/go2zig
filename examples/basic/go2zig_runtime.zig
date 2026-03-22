@@ -72,14 +72,14 @@ pub fn ownUserKindList(value: []const api.UserKind) api.UserKindList {
     return .{ .ptr = buf.ptr, .len = buf.len };
 }
 
-pub inline fn asDigestList(value: api.DigestList) []const [4]u8 {
+pub inline fn asDigestList(value: api.DigestList) []const api.Digest {
     if (value.ptr == null or value.len == 0) return &.{};
     return value.ptr.?[0..value.len];
 }
 
-pub fn ownDigestList(value: []const [4]u8) api.DigestList {
+pub fn ownDigestList(value: []const api.Digest) api.DigestList {
     if (value.len == 0) return .{ .ptr = null, .len = 0 };
-    const buf = std.heap.smp_allocator.alloc([4]u8, value.len) catch @panic("go2zig: alloc slice failed");
+    const buf = std.heap.smp_allocator.alloc(api.Digest, value.len) catch @panic("go2zig: alloc slice failed");
     @memcpy(buf, value);
     return .{ .ptr = buf.ptr, .len = buf.len };
 }

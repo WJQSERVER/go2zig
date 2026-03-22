@@ -62,7 +62,7 @@ pub export fn go2zig_call_promote_user(frame: *Go2ZigCallPromoteUser) void {
 
 pub const Go2ZigCallDigestName = extern struct {
     name: api.String,
-    out: [4]u8,
+    out: api.Digest,
 };
 
 pub export fn go2zig_call_digest_name(frame: *Go2ZigCallDigestName) void {

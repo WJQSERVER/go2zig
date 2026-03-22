@@ -13,6 +13,7 @@ func TestSortedStructs(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -41,6 +42,7 @@ func TestSortedStructsRejectsCycle(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -59,6 +61,7 @@ func TestTypeNeedsAllocationAndArena(t *testing.T) {
 			{Name: "User", Fields: []Field{{Name: "name", Type: TypeRef{Kind: TypeString, Name: "String", Raw: "String"}}}},
 			{Name: "Wrapper", Fields: []Field{{Name: "user", Type: TypeRef{Kind: TypeStruct, Name: "User", Raw: "User"}}}},
 		},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -99,6 +102,7 @@ func TestNewResolvesEnumsAndArrays(t *testing.T) {
 		}},
 		[]*Enum{{Name: "UserKind", BaseName: "u8", Values: []EnumValue{{Name: "guest"}, {Name: "member"}}}},
 		nil,
+		nil,
 		[]*Function{{Name: "digest", Return: TypeRef{Kind: TypeArray, Raw: "[3]UserKind", ArrayLen: 3, Elem: &TypeRef{Kind: TypeStruct, Name: "UserKind", Raw: "UserKind"}}}},
 	)
 	if err != nil {
@@ -119,6 +123,7 @@ func TestNewResolvesPODSliceAliases(t *testing.T) {
 		nil,
 		nil,
 		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}},
+		nil,
 		[]*Function{{Name: "scale_scores", Params: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}, Return: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}},
 	)
 	if err != nil {

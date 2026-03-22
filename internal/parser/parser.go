@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	structPattern = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{(.*?)\}\s*;`)
-	enumPattern   = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*enum\s*\(([^)]+)\)\s*\{(.*?)\}\s*;`)
-	slicePattern  = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{\s*ptr\s*:\s*\?\s*\[\*\]const\s+([^,]+),\s*len\s*:\s*usize\s*,?\s*\}\s*;`)
-	funcPattern   = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
-	arrayPattern  = regexp.MustCompile(`^\[(\d+)\](.+)$`)
+	structPattern     = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{(.*?)\}\s*;`)
+	enumPattern       = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*enum\s*\(([^)]+)\)\s*\{(.*?)\}\s*;`)
+	slicePattern      = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{\s*ptr\s*:\s*\?\s*\[\*\]const\s+([^,]+),\s*len\s*:\s*usize\s*,?\s*\}\s*;`)
+	arrayAliasPattern = regexp.MustCompile(`(?m)^\s*pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\[[^;=]+)\s*;\s*$`)
+	funcPattern       = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
+	arrayPattern      = regexp.MustCompile(`^\[(\d+)\](.+)$`)
 )
 
 func ParseFile(path string) (*model.API, error) {
@@ -40,11 +41,15 @@ func Parse(content string) (*model.API, error) {
 	if err != nil {
 		return nil, err
 	}
+	arrays, err := parseArrayAliases(clean)
+	if err != nil {
+		return nil, err
+	}
 	funcs, err := parseFunctions(clean)
 	if err != nil {
 		return nil, err
 	}
-	return model.New(structs, enums, slices, funcs)
+	return model.New(structs, enums, slices, arrays, funcs)
 }
 
 func parseStructs(content string) ([]*model.Struct, error) {
@@ -91,6 +96,23 @@ func parseSlices(content string) ([]*model.Slice, error) {
 		slices = append(slices, &model.Slice{Name: name, Elem: elem})
 	}
 	return slices, nil
+}
+
+func parseArrayAliases(content string) ([]*model.ArrayAlias, error) {
+	matches := arrayAliasPattern.FindAllStringSubmatch(content, -1)
+	aliases := make([]*model.ArrayAlias, 0, len(matches))
+	for _, match := range matches {
+		name := match[1]
+		typ, err := parseType(strings.TrimSpace(match[2]))
+		if err != nil {
+			return nil, fmt.Errorf("parse array alias %q: %w", name, err)
+		}
+		if typ.Kind != model.TypeArray {
+			continue
+		}
+		aliases = append(aliases, &model.ArrayAlias{Name: name, Type: typ})
+	}
+	return aliases, nil
 }
 
 func isSliceStruct(body string) bool {

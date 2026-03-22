@@ -248,6 +248,8 @@ const (
 	UserKindAdmin  UserKind = UserKind(2)
 )
 
+type Digest [4]uint8
+
 type ScoreList []uint16
 
 type _go2zigScoreList struct {
@@ -312,7 +314,7 @@ func _go2zigOwnUserKindList(rt *_go2zigRuntime, value _go2zigUserKindList) UserK
 	return ret
 }
 
-type DigestList [][4]uint8
+type DigestList []Digest
 
 type _go2zigDigestList struct {
 	ptr unsafe.Pointer
@@ -338,7 +340,7 @@ func _go2zigOwnDigestList(rt *_go2zigRuntime, value _go2zigDigestList) DigestLis
 	src := unsafe.Slice((*[4]uint8)(value.ptr), int(value.len))
 	ret := make(DigestList, len(src))
 	for i := range src {
-		ret[i] = _go2zigOwnArray_array_4_1_u8(rt, src[i])
+		ret[i] = _go2zigOwnArray_arrayalias_Digest(rt, src[i])
 	}
 	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof([4]uint8{})))
 	return ret
@@ -487,6 +489,22 @@ func _go2zigRefArray_array_4_1_u8(value [4]uint8) [4]uint8 {
 
 func _go2zigOwnArray_array_4_1_u8(rt *_go2zigRuntime, value [4]uint8) [4]uint8 {
 	var out [4]uint8
+	for i := range value {
+		out[i] = uint8(value[i])
+	}
+	return out
+}
+
+func _go2zigRefArray_arrayalias_Digest(value Digest) [4]uint8 {
+	var out [4]uint8
+	for i := range value {
+		out[i] = uint8(value[i])
+	}
+	return out
+}
+
+func _go2zigOwnArray_arrayalias_Digest(rt *_go2zigRuntime, value [4]uint8) Digest {
+	var out Digest
 	for i := range value {
 		out[i] = uint8(value[i])
 	}
@@ -797,15 +815,15 @@ func PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User {
 	return Default.PromoteUser(user, nextKind, nextScores)
 }
 
-func (c *Go2ZigClient) DigestName(name string) [4]uint8 {
+func (c *Go2ZigClient) DigestName(name string) Digest {
 	var frame _go2zigCallDigestName
 	frame.name = _go2zigRefString(name)
 	c.rt.call(c.rt.procDigestName, unsafe.Pointer(&frame))
 	runtime.KeepAlive(name)
-	return _go2zigOwnArray_array_4_1_u8(c.rt, frame.out)
+	return _go2zigOwnArray_arrayalias_Digest(c.rt, frame.out)
 }
 
-func DigestName(name string) [4]uint8 {
+func DigestName(name string) Digest {
 	return Default.DigestName(name)
 }
 

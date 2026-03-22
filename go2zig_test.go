@@ -15,6 +15,8 @@ pub const String = extern struct {
     len: usize,
 };
 
+pub const Digest = [4]u8;
+
 pub const Bytes = extern struct {
     ptr: [*]const u8,
     len: usize,
@@ -31,7 +33,7 @@ pub const UserKindList = extern struct {
 };
 
 pub const DigestList = extern struct {
-    ptr: ?[*]const [4]u8,
+    ptr: ?[*]const Digest,
     len: usize,
 };
 
@@ -83,7 +85,7 @@ pub const LoginResponse = extern struct {
     ok: bool,
     message: String,
     token: Bytes,
-    digest: [4]u8,
+    digest: Digest,
 };
 
 pub const LoginError = error{
@@ -95,7 +97,7 @@ pub extern fn login(req: LoginRequest) LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
 pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
-pub extern fn digest_name(name: String) [4]u8;
+pub extern fn digest_name(name: String) Digest;
 pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
 pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
@@ -153,7 +155,7 @@ pub fn promote_user(user: api.User, next_kind: api.UserKind, next_scores: [3]u16
     };
 }
 
-pub fn digest_name(name: api.String) [4]u8 {
+pub fn digest_name(name: api.String) api.Digest {
     const value = rt.asSlice(name);
     return .{
         if (value.len > 0) value[0] else 0,
@@ -259,9 +261,10 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"package sample",
 		"type Go2ZigClient struct",
 		"type UserKind uint8",
+		"type Digest [4]uint8",
 		"type ScoreList []uint16",
 		"type UserKindList []UserKind",
-		"type DigestList [][4]uint8",
+		"type DigestList []Digest",
 		"type MetricList []Metric",
 		"type UserList []User",
 		"type BucketList []Bucket",
@@ -270,7 +273,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"func Login(req LoginRequest) LoginResponse",
 		"func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)",
 		"func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User",
-		"func (c *Go2ZigClient) DigestName(name string) [4]uint8",
+		"func (c *Go2ZigClient) DigestName(name string) Digest",
 		"func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList",
 		"func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList",
 		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
