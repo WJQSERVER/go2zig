@@ -29,6 +29,10 @@ func CallFuncG0P2(fn, arg0, arg1 unsafe.Pointer)
 
 //go:noescape
 //go:nosplit
+func CallFuncG0P2StoreR1(fn, arg0, arg1, out unsafe.Pointer)
+
+//go:noescape
+//go:nosplit
 func CallFuncG0P2R1(fn, arg0, arg1 unsafe.Pointer) uintptr
 
 //go:noescape

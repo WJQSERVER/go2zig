@@ -4,6 +4,7 @@ package dynlib
 
 import (
 	"fmt"
+	"go2zig/asmcall"
 	"unsafe"
 	_ "unsafe"
 )
@@ -64,13 +65,19 @@ func (l *Library) Close() error {
 }
 
 func libdlOpen(path []byte, mode uintptr) uintptr {
-	return callFuncG0P2R1(unsafe.Pointer(libdl_dlopen), unsafe.Pointer(unsafe.SliceData(path)), unsafe.Pointer(mode))
+	var out uintptr
+	asmcall.CallFuncG0P2StoreR1(unsafe.Pointer(libdl_dlopen), unsafe.Pointer(unsafe.SliceData(path)), unsafe.Pointer(mode), unsafe.Pointer(&out))
+	return out
 }
 
 func libdlSym(handle uintptr, name []byte) uintptr {
-	return callFuncG0P2R1(unsafe.Pointer(libdl_dlsym), unsafe.Pointer(handle), unsafe.Pointer(unsafe.SliceData(name)))
+	var out uintptr
+	asmcall.CallFuncG0P2StoreR1(unsafe.Pointer(libdl_dlsym), unsafe.Pointer(handle), unsafe.Pointer(unsafe.SliceData(name)), unsafe.Pointer(&out))
+	return out
 }
 
 func libdlClose(handle uintptr) uintptr {
-	return callFuncG0P2R1(unsafe.Pointer(libdl_dlclose), unsafe.Pointer(handle), nil)
+	var out uintptr
+	asmcall.CallFuncG0P2StoreR1(unsafe.Pointer(libdl_dlclose), unsafe.Pointer(handle), nil, unsafe.Pointer(&out))
+	return out
 }
