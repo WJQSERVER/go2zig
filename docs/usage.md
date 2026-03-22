@@ -59,8 +59,10 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 
 - `String` 和 `Bytes` 是约定好的桥接类型别名
 - 可以声明 `enum(u8)`、`enum(u16)`、`enum(u32)` 等整型枚举
+- 可以声明命名数组别名，例如 `pub const Digest = [4]u8`
 - 可以声明 POD 切片别名，例如 `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`
 - 可以声明固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]UserKind`
+- 可以声明 `optional POD`，例如 `?u32`、`?UserKind`、`?Digest`
 - 业务 struct 用 `extern struct`
 - 函数声明用 `pub extern fn`
 - `error union` 当前建议优先使用命名 error set，例如 `LoginError!LoginResponse`
@@ -148,9 +150,26 @@ _ = resp
 对于新增支持的类型：
 
 - Zig `enum(u8)` 会生成 Go 命名类型和对应常量
+- Zig 命名数组别名会生成 Go 命名数组类型
 - POD 切片别名会生成 Go `[]T` 命名别名，并自动做零拷贝入参 / 拷贝出参转换
 - POD 切片的元素当前可以是基础类型、整型枚举、固定长度数组
 - Zig `[N]T` 会生成 Go `[N]T` 数组，并自动做 ABI 转换
+- Zig `?T` 当前会在 Go 侧生成 `*T`
+
+例如：
+
+```zig
+pub const Digest = [4]u8;
+pub extern fn maybe_digest(flag: bool) ?Digest;
+```
+
+会生成：
+
+```go
+type Digest [4]uint8
+
+func MaybeDigest(flag bool) *Digest
+```
 
 ## 6. 自定义动态库路径
 
@@ -243,4 +262,5 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 1. `README.md`
 2. `docs/architecture.md`
 3. `docs/runtime.md`
-4. `examples/basic`
+4. `docs/testing.md`
+5. `examples/basic`

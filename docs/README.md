@@ -12,6 +12,7 @@
 2. `docs/usage.md`
 3. `docs/generator.md`
 4. `docs/runtime.md`
-5. `docs/ci.md`
+5. `docs/testing.md`
+6. `docs/ci.md`
 
 如果你只是想快速上手，可以先看仓库根目录的 `README.md`，再结合 `examples/basic` 理解完整生成流程。

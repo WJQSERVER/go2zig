@@ -51,11 +51,14 @@ pub extern fn rename_user(user: User, next_name: String) User;
 
 - 基础类型：`bool` `u8/u16/u32/u64/usize` `i8/i16/i32/i64/isize` `f32` `f64`
 - `enum(<int>)` 风格枚举
+- 命名数组别名，例如 `pub const Digest = [4]u8`
 - 特殊类型：`String` `Bytes`
 - `extern struct` 组合和嵌套
 - POD 切片别名，例如 `extern struct { ptr: ?[*]const u16, len: usize }`
-- POD 切片元素可为基础类型、整型枚举、固定长度数组
+- POD 切片元素可为基础类型、整型枚举、固定长度数组、POD 切片别名
 - 固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]MyEnum`
+- `optional POD`，例如 `?u32`、`?UserKind`、`?Digest`
+- `[]struct` 切片别名，包括 `POD struct`、含 `String/Bytes` 的 struct、含 `POD slice` 字段的 struct
 - `pub extern fn` / `pub export fn` 风格函数签名解析
 - `[*]const u8` 与 `?[*]const u8` 这类 Zig 指针形式的 `String`/`Bytes` 别名
 
@@ -110,6 +113,19 @@ go run ./examples/basic
 ```
 
 说明：当前无 `cgo` 高性能运行时优先支持 `windows/amd64` 与 `linux/amd64`。
+
+## 性能现状
+
+当前仓库已经加入 `asm` / `cgo` / `syscall` 的最小调用基准。
+
+在当前 Windows 开发机上最近一次实测到的一个代表性结果是：
+
+- `BenchmarkCgoAddU64`: `28.56 ns/op`
+- `BenchmarkAsmCallCAddU64`: `3.352 ns/op`
+
+也就是说，在极短同步调用上，当前无 `cgo` asm 路径大约比 cgo 快 `8x` 左右。
+
+更详细的测试和 benchmark 说明见 `docs/testing.md`。
 
 ## 后续可扩展方向
 
