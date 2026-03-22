@@ -164,3 +164,38 @@ func TestOptionalPODTraits(t *testing.T) {
 		t.Fatal("optional u32 should not require keepalive")
 	}
 }
+
+func TestStructSliceElemSupportMatrix(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		[]*Struct{
+			{Name: "Bucket", Fields: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}},
+			{Name: "Nested", Fields: []Field{{Name: "groups", Type: TypeRef{Kind: TypeStruct, Name: "NestedList", Raw: "NestedList"}}}},
+		},
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}, {Name: "NestedList", Elem: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.SupportsSliceElem(TypeRef{Kind: TypeStruct, Name: "Nested", Raw: "Nested"}) {
+		t.Fatal("Nested should be allowed as slice element when its slice field element is POD")
+	}
+
+	api, err = New(
+		[]*Struct{{Name: "Bucket", Fields: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}}},
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}, {Name: "BucketList", Elem: TypeRef{Kind: TypeStruct, Name: "Bucket", Raw: "Bucket"}}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.SupportsSliceElem(TypeRef{Kind: TypeStruct, Name: "Bucket", Raw: "Bucket"}) {
+		t.Fatal("Bucket should be allowed as slice element when its slice field element is POD")
+	}
+}

@@ -201,6 +201,14 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias
 		}
 	}
 
+	for _, item := range structs {
+		for i := range item.Fields {
+			if err := api.resolveType(&item.Fields[i].Type, "struct "+item.Name); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	for _, item := range funcs {
 		for i := range item.Params {
 			if err := api.resolveType(&item.Params[i].Type, "function "+item.Name); err != nil {
