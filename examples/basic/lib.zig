@@ -113,3 +113,16 @@ pub fn mirror_users(users: api.UserList) api.UserList {
     }
     return rt.ownUserList(out);
 }
+
+pub fn mirror_buckets(buckets: api.BucketList) api.BucketList {
+    const items = rt.asBucketList(buckets);
+    const out = std.heap.page_allocator.alloc(api.Bucket, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |bucket, i| {
+        out[i] = .{
+            .kind = bucket.kind,
+            .scores = rt.ownScoreList(rt.asScoreList(bucket.scores)),
+        };
+    }
+    return rt.ownBucketList(out);
+}

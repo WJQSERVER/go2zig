@@ -110,4 +110,9 @@ func TestExampleAPI(t *testing.T) {
 	if len(users) != 2 || users[0].Name != "alice" || users[1].Email != "bob@example.com" {
 		t.Fatalf("MirrorUsers() result = %v, want mirrored users", users)
 	}
+
+	buckets := MirrorBuckets(BucketList{{Kind: UserKindMember, Scores: ScoreList{2, 4, 6}}, {Kind: UserKindAdmin, Scores: ScoreList{3, 6, 9}}})
+	if len(buckets) != 2 || len(buckets[0].Scores) != 3 || buckets[1].Scores[2] != 9 {
+		t.Fatalf("MirrorBuckets() result = %v, want mirrored buckets", buckets)
+	}
 }

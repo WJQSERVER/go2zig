@@ -115,3 +115,12 @@ pub export fn go2zig_call_mirror_users(frame: *Go2ZigCallMirrorUsers) void {
     frame.out = impl.mirror_users(frame.users);
 }
 
+pub const Go2ZigCallMirrorBuckets = extern struct {
+    buckets: api.BucketList,
+    out: api.BucketList,
+};
+
+pub export fn go2zig_call_mirror_buckets(frame: *Go2ZigCallMirrorBuckets) void {
+    frame.out = impl.mirror_buckets(frame.buckets);
+}
+

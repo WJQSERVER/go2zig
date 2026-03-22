@@ -33,6 +33,11 @@ pub const UserList = extern struct {
     len: usize,
 };
 
+pub const BucketList = extern struct {
+    ptr: ?[*]const Bucket,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -50,6 +55,11 @@ pub const User = extern struct {
 pub const Metric = extern struct {
     kind: UserKind,
     scores: [3]u16,
+};
+
+pub const Bucket = extern struct {
+    kind: UserKind,
+    scores: ScoreList,
 };
 
 pub const LoginRequest = extern struct {
@@ -79,3 +89,4 @@ pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
 pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 pub extern fn mirror_users(users: UserList) UserList;
+pub extern fn mirror_buckets(buckets: BucketList) BucketList;

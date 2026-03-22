@@ -183,7 +183,7 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	for _, item := range api.Structs {
 		body.WriteString(renderPublicStruct(item))
 		body.WriteString(renderABIStruct(item))
-		body.WriteString(renderRefStruct(item))
+		body.WriteString(renderRefStruct(api, item))
 		body.WriteString(renderOwnStruct(item))
 	}
 
@@ -192,7 +192,7 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	}
 
 	for _, fn := range api.Funcs {
-		body.WriteString(renderMethod(fn))
+		body.WriteString(renderMethod(api, fn))
 		body.WriteString("\n")
 		body.WriteString(renderTopLevel(fn))
 		body.WriteString("\n")
@@ -422,26 +422,72 @@ func renderABIStruct(item *model.Struct) string {
 	return b.String()
 }
 
-func renderRefStruct(item *model.Struct) string {
+func renderRefStruct(api *model.API, item *model.Struct) string {
 	var b strings.Builder
+	b.WriteString("type ")
+	b.WriteString(refStructResultName(item.Name))
+	b.WriteString(" struct {\n\tvalue ")
+	b.WriteString(abiStructName(item.Name))
+	b.WriteString("\n\tkeep []any\n}\n\n")
+
 	b.WriteString("func ")
 	b.WriteString(refFuncName(item.Name))
 	b.WriteString("(value ")
 	b.WriteString(item.Name)
 	b.WriteString(") ")
-	b.WriteString(abiStructName(item.Name))
+	b.WriteString(refStructResultName(item.Name))
 	b.WriteString(" {\n")
-	b.WriteString("\treturn ")
+	b.WriteString("\tvar out ")
 	b.WriteString(abiStructName(item.Name))
-	b.WriteString("{\n")
+	b.WriteString("\n\tvar keep []any\n")
 	for _, field := range item.Fields {
-		b.WriteString("\t\t")
-		b.WriteString(field.Name)
-		b.WriteString(": ")
-		b.WriteString(refExpr(field.Type, "value."+names.Exported(field.Name)))
-		b.WriteString(",\n")
+		fieldExpr := "value." + names.Exported(field.Name)
+		switch {
+		case field.Type.Kind == model.TypeSlice:
+			keepName := "_keep" + names.Exported(field.Name)
+			b.WriteString("\t")
+			b.WriteString(keepName)
+			b.WriteString(" := ")
+			b.WriteString(refSliceFuncName(field.Type.Name))
+			b.WriteString("(")
+			b.WriteString(fieldExpr)
+			b.WriteString(")\n")
+			b.WriteString("\tout.")
+			b.WriteString(field.Name)
+			b.WriteString(" = ")
+			b.WriteString(keepName)
+			b.WriteString(".slice\n")
+			b.WriteString("\tkeep = append(keep, ")
+			b.WriteString(keepName)
+			b.WriteString(".keep...)\n")
+		case field.Type.Kind == model.TypeStruct && api.TypeNeedsKeepAlive(field.Type):
+			keepName := "_keep" + names.Exported(field.Name)
+			b.WriteString("\t")
+			b.WriteString(keepName)
+			b.WriteString(" := ")
+			b.WriteString(refFuncName(field.Type.Name))
+			b.WriteString("(")
+			b.WriteString(fieldExpr)
+			b.WriteString(")\n")
+			b.WriteString("\tout.")
+			b.WriteString(field.Name)
+			b.WriteString(" = ")
+			b.WriteString(keepName)
+			b.WriteString(".value\n")
+			b.WriteString("\tkeep = append(keep, ")
+			b.WriteString(keepName)
+			b.WriteString(".keep...)\n")
+		default:
+			b.WriteString("\tout.")
+			b.WriteString(field.Name)
+			b.WriteString(" = ")
+			b.WriteString(refExpr(field.Type, fieldExpr))
+			b.WriteString("\n")
+		}
 	}
-	b.WriteString("\t}\n")
+	b.WriteString("\treturn ")
+	b.WriteString(refStructResultName(item.Name))
+	b.WriteString("{value: out, keep: keep}\n")
 	b.WriteString("}\n\n")
 	return b.String()
 }
@@ -497,7 +543,7 @@ func renderFrameStruct(fn *model.Function) string {
 	return b.String()
 }
 
-func renderMethod(fn *model.Function) string {
+func renderMethod(api *model.API, fn *model.Function) string {
 	goName := names.Exported(fn.Name)
 	var b strings.Builder
 	keepVars := make([]string, 0)
@@ -545,6 +591,23 @@ func renderMethod(fn *model.Function) string {
 			b.WriteString(" = ")
 			b.WriteString(keepName)
 			b.WriteString(".slice\n")
+			continue
+		}
+		if param.Type.Kind == model.TypeStruct && api.TypeNeedsKeepAlive(param.Type) {
+			keepName := "_keep" + names.Exported(param.Name)
+			keepVars = append(keepVars, keepName)
+			b.WriteString("\t")
+			b.WriteString(keepName)
+			b.WriteString(" := ")
+			b.WriteString(refFuncName(param.Type.Name))
+			b.WriteString("(")
+			b.WriteString(goParamName(param.Name))
+			b.WriteString(")\n")
+			b.WriteString("\tframe.")
+			b.WriteString(param.Name)
+			b.WriteString(" = ")
+			b.WriteString(keepName)
+			b.WriteString(".value\n")
 			continue
 		}
 		b.WriteString("\tframe.")
@@ -653,7 +716,7 @@ func refExpr(t model.TypeRef, expr string) string {
 	case model.TypeArray:
 		return arrayRefFuncName(t) + "(" + expr + ")"
 	case model.TypeStruct:
-		return refFuncName(t.Name) + "(" + expr + ")"
+		return refFuncName(t.Name) + "(" + expr + ").value"
 	default:
 		return expr
 	}
@@ -759,6 +822,9 @@ func zigType(t model.TypeRef) string {
 func abiStructName(name string) string { return "_go2zig" + name }
 func refFuncName(name string) string   { return "_go2zigRef" + name }
 func ownFuncName(name string) string   { return "_go2zigOwn" + name }
+func refStructResultName(name string) string {
+	return "_go2zigRef" + name + "Result"
+}
 func goFrameName(fn *model.Function) string {
 	return "_go2zigCall" + names.Exported(fn.Name)
 }
@@ -893,14 +959,19 @@ func renderRefSlice(item *model.Slice) string {
 		b.WriteString("\tbuf := make([]")
 		b.WriteString(abiType(item.Elem))
 		b.WriteString(", len(value))\n")
-		b.WriteString("\tfor i := range value {\n\t\tbuf[i] = ")
-		b.WriteString(refExpr(item.Elem, "value[i]"))
-		b.WriteString("\n\t}\n")
+		b.WriteString("\tvar keep []any\n")
+		b.WriteString("\tfor i := range value {\n")
+		b.WriteString("\t\titem := ")
+		b.WriteString(refFuncName(item.Elem.Name))
+		b.WriteString("(value[i])\n")
+		b.WriteString("\t\tbuf[i] = item.value\n")
+		b.WriteString("\t\tkeep = append(keep, item.keep...)\n")
+		b.WriteString("\t}\n")
 		b.WriteString("\treturn ")
 		b.WriteString(refSliceResultName(item.Name))
 		b.WriteString("{slice: ")
 		b.WriteString(abiSliceName(item.Name))
-		b.WriteString("{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: []any{buf}}\n")
+		b.WriteString("{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: append([]any{buf}, keep...)}\n")
 	} else {
 		b.WriteString("\treturn ")
 		b.WriteString(refSliceResultName(item.Name))

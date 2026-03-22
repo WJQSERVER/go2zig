@@ -45,6 +45,11 @@ pub const UserList = extern struct {
     len: usize,
 };
 
+pub const BucketList = extern struct {
+    ptr: ?[*]const Bucket,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -62,6 +67,11 @@ pub const User = extern struct {
 pub const Metric = extern struct {
     kind: UserKind,
     scores: [3]u16,
+};
+
+pub const Bucket = extern struct {
+    kind: UserKind,
+    scores: ScoreList,
 };
 
 pub const LoginRequest = extern struct {
@@ -91,6 +101,7 @@ pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
 pub extern fn duplicate_digest(seed: String) DigestList;
 pub extern fn mirror_metrics(metrics: MetricList) MetricList;
 pub extern fn mirror_users(users: UserList) UserList;
+pub extern fn mirror_buckets(buckets: BucketList) BucketList;
 `
 
 const integrationLib = `
@@ -202,6 +213,19 @@ pub fn mirror_users(users: api.UserList) api.UserList {
     }
     return rt.ownUserList(out);
 }
+
+pub fn mirror_buckets(buckets: api.BucketList) api.BucketList {
+    const items = rt.asBucketList(buckets);
+    const out = std.heap.page_allocator.alloc(api.Bucket, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |bucket, i| {
+        out[i] = .{
+            .kind = bucket.kind,
+            .scores = rt.ownScoreList(rt.asScoreList(bucket.scores)),
+        };
+    }
+    return rt.ownBucketList(out);
+}
 `
 
 func TestGenerateWritesGoFile(t *testing.T) {
@@ -240,6 +264,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"type DigestList [][4]uint8",
 		"type MetricList []Metric",
 		"type UserList []User",
+		"type BucketList []Bucket",
 		"var Default = NewGo2ZigClient(\"\")",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
 		"func Login(req LoginRequest) LoginResponse",
@@ -251,6 +276,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
 		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
 		"func (c *Go2ZigClient) MirrorUsers(users UserList) UserList",
+		"func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -352,6 +378,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorUsers(users UserList) UserList") {
 		t.Fatalf("generated file missing dynamic-struct-slice wrapper\n%s", string(content))
 	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList") {
+		t.Fatalf("generated file missing slice-field-struct wrapper\n%s", string(content))
+	}
 }
 
 func TestBuilderGenerateOnly(t *testing.T) {
@@ -446,6 +475,7 @@ func main() {
 	duplicates := DuplicateDigest("alice")
 	metrics := MirrorMetrics(MetricList{{Kind: UserKindMember, Scores: [3]uint16{3, 5, 8}}, {Kind: UserKindAdmin, Scores: [3]uint16{13, 21, 34}}})
 	users := MirrorUsers(UserList{{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}}, {ID: 8, Kind: UserKindAdmin, Name: "bob", Email: "bob@example.com", Scores: [3]uint16{13, 21, 34}}})
+	buckets := MirrorBuckets(BucketList{{Kind: UserKindMember, Scores: ScoreList{2, 4, 6}}, {Kind: UserKindAdmin, Scores: ScoreList{3, 6, 9}}})
 	checked, err := LoginChecked(LoginRequest{
 		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
@@ -460,7 +490,7 @@ func main() {
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], users[1].Name, checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], users[1].Name, buckets[1].Scores[2], checked.Message, err != nil)
 }
 `)
 
@@ -471,7 +501,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|9|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }

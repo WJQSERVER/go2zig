@@ -453,7 +453,13 @@ func (a *API) SupportsSliceElem(t TypeRef) bool {
 			return false
 		}
 		for _, field := range item.Fields {
-			if field.Type.Kind == TypeSlice || !a.SupportsSliceElem(field.Type) {
+			if field.Type.Kind == TypeSlice {
+				if field.Type.Elem == nil || !a.IsPOD(*field.Type.Elem) {
+					return false
+				}
+				continue
+			}
+			if !a.SupportsSliceElem(field.Type) {
 				return false
 			}
 		}
@@ -461,4 +467,27 @@ func (a *API) SupportsSliceElem(t TypeRef) bool {
 	default:
 		return false
 	}
+}
+
+func (a *API) TypeNeedsKeepAlive(t TypeRef) bool {
+	switch t.Kind {
+	case TypeSlice:
+		return true
+	case TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return a.TypeNeedsKeepAlive(*t.Elem)
+	case TypeStruct:
+		item := a.Struct(t.Name)
+		if item == nil {
+			return false
+		}
+		for _, field := range item.Fields {
+			if a.TypeNeedsKeepAlive(field.Type) {
+				return true
+			}
+		}
+	}
+	return false
 }
