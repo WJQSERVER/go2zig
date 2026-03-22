@@ -139,4 +139,9 @@ func TestExampleAPI(t *testing.T) {
 	if got := ChooseLimit(false, &base); got != nil {
 		t.Fatalf("ChooseLimit(false,&base) = %v, want nil", got)
 	}
+
+	groups := MirrorScoreGroups(ScoreGroupList{ScoreList{1, 2}, ScoreList{3, 6, 9}})
+	if len(groups) != 2 || len(groups[1]) != 3 || groups[1][2] != 9 {
+		t.Fatalf("MirrorScoreGroups() result = %v, want mirrored score groups", groups)
+	}
 }

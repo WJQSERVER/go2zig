@@ -51,6 +51,11 @@ pub const BucketList = extern struct {
     len: usize,
 };
 
+pub const ScoreGroupList = extern struct {
+    ptr: ?[*]const ScoreList,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -109,6 +114,7 @@ pub extern fn mirror_buckets(buckets: BucketList) BucketList;
 pub extern fn maybe_kind(flag: bool) ?UserKind;
 pub extern fn maybe_digest(flag: bool) ?Digest;
 pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
+pub extern fn mirror_score_groups(groups: ScoreGroupList) ScoreGroupList;
 `
 
 func TestParse(t *testing.T) {
@@ -128,11 +134,11 @@ func TestParse(t *testing.T) {
 	if len(api.Arrays) != 1 {
 		t.Fatalf("Parse() arrays = %d, want 1", len(api.Arrays))
 	}
-	if len(api.Slices) != 6 {
-		t.Fatalf("Parse() slices = %d, want 6", len(api.Slices))
+	if len(api.Slices) != 7 {
+		t.Fatalf("Parse() slices = %d, want 7", len(api.Slices))
 	}
-	if len(api.Funcs) != 15 {
-		t.Fatalf("Parse() funcs = %d, want 15", len(api.Funcs))
+	if len(api.Funcs) != 16 {
+		t.Fatalf("Parse() funcs = %d, want 16", len(api.Funcs))
 	}
 
 	if api.Struct("String") != nil || api.Struct("Bytes") != nil {
@@ -206,6 +212,9 @@ func TestParse(t *testing.T) {
 	}
 	if got := api.Funcs[14].Params[1].Type.Kind; got != model.TypeOptional {
 		t.Fatalf("choose_limit second param kind = %v, want optional", got)
+	}
+	if got := api.Funcs[15].Params[0].Type.Elem.Kind; got != model.TypeSlice {
+		t.Fatalf("mirror_score_groups elem kind = %v, want slice", got)
 	}
 }
 

@@ -40,6 +40,11 @@ pub const BucketList = extern struct {
     len: usize,
 };
 
+pub const ScoreGroupList = extern struct {
+    ptr: ?[*]const ScoreList,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -95,3 +100,4 @@ pub extern fn mirror_buckets(buckets: BucketList) BucketList;
 pub extern fn maybe_kind(flag: bool) ?UserKind;
 pub extern fn maybe_digest(flag: bool) ?Digest;
 pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
+pub extern fn mirror_score_groups(groups: ScoreGroupList) ScoreGroupList;

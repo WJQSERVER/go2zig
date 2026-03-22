@@ -20,6 +20,7 @@ func TestRender(t *testing.T) {
 		pub const MetricList = extern struct { ptr: ?[*]const Metric, len: usize, };
 		pub const UserList = extern struct { ptr: ?[*]const User, len: usize, };
 		pub const BucketList = extern struct { ptr: ?[*]const Bucket, len: usize, };
+		pub const ScoreGroupList = extern struct { ptr: ?[*]const ScoreList, len: usize, };
 		pub const UserKind = enum(u8) { guest, member, admin };
         pub const User = extern struct {
             id: u64,
@@ -62,6 +63,7 @@ func TestRender(t *testing.T) {
 		pub extern fn maybe_kind(flag: bool) ?UserKind;
 		pub extern fn maybe_digest(flag: bool) ?Digest;
 		pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
+		pub extern fn mirror_score_groups(groups: ScoreGroupList) ScoreGroupList;
 	`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -103,6 +105,7 @@ func TestRender(t *testing.T) {
 		"func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind",
 		"func (c *Go2ZigClient) MaybeDigest(flag bool) *Digest",
 		"func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32",
+		"func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList",
 		"type _go2zigOptional_optional_",
 		"func _go2zigRefOptional_",
 		"func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult",

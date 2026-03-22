@@ -44,6 +44,7 @@ type _go2zigRuntime struct {
 	procMaybeKind         uintptr
 	procMaybeDigest       uintptr
 	procChooseLimit       uintptr
+	procMirrorScoreGroups uintptr
 	err                   error
 }
 
@@ -121,6 +122,10 @@ func (rt *_go2zigRuntime) Load() error {
 		}
 		if rt.procChooseLimit, err = lib.Lookup("go2zig_call_choose_limit"); err != nil {
 			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_choose_limit: %w", err)
+			return
+		}
+		if rt.procMirrorScoreGroups, err = lib.Lookup("go2zig_call_mirror_score_groups"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_score_groups: %w", err)
 			return
 		}
 	})
@@ -538,6 +543,45 @@ func _go2zigOwnBucketList(rt *_go2zigRuntime, value _go2zigBucketList) BucketLis
 	return ret
 }
 
+type ScoreGroupList []ScoreList
+
+type _go2zigScoreGroupList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefScoreGroupListResult struct {
+	slice _go2zigScoreGroupList
+	keep  []any
+}
+
+func _go2zigRefScoreGroupList(value ScoreGroupList) _go2zigRefScoreGroupListResult {
+	if len(value) == 0 {
+		return _go2zigRefScoreGroupListResult{}
+	}
+	buf := make([]_go2zigScoreList, len(value))
+	var keep []any
+	for i := range value {
+		item := _go2zigRefScoreList(value[i])
+		buf[i] = item.slice
+		keep = append(keep, item.keep...)
+	}
+	return _go2zigRefScoreGroupListResult{slice: _go2zigScoreGroupList{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: append([]any{buf}, keep...)}
+}
+
+func _go2zigOwnScoreGroupList(rt *_go2zigRuntime, value _go2zigScoreGroupList) ScoreGroupList {
+	if value.ptr == nil || value.len == 0 {
+		return nil
+	}
+	src := unsafe.Slice((*_go2zigScoreList)(value.ptr), int(value.len))
+	ret := make(ScoreGroupList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnScoreList(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(_go2zigScoreList{})))
+	return ret
+}
+
 func _go2zigRefArray_array_3_1_u16(value [3]uint16) [3]uint16 {
 	var out [3]uint16
 	for i := range value {
@@ -838,6 +882,11 @@ type _go2zigCallChooseLimit struct {
 	out   _go2zigOptional_optional_1_u32
 }
 
+type _go2zigCallMirrorScoreGroups struct {
+	groups _go2zigScoreGroupList
+	out    _go2zigScoreGroupList
+}
+
 func (c *Go2ZigClient) Health() bool {
 	var frame _go2zigCallHealth
 	c.rt.call(c.rt.procHealth, unsafe.Pointer(&frame))
@@ -1038,4 +1087,18 @@ func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32 {
 
 func ChooseLimit(flag bool, value *uint32) *uint32 {
 	return Default.ChooseLimit(flag, value)
+}
+
+func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList {
+	var frame _go2zigCallMirrorScoreGroups
+	_keepGroups := _go2zigRefScoreGroupList(groups)
+	frame.groups = _keepGroups.slice
+	c.rt.call(c.rt.procMirrorScoreGroups, unsafe.Pointer(&frame))
+	runtime.KeepAlive(groups)
+	_go2zigKeep(_keepGroups.keep)
+	return _go2zigOwnScoreGroupList(c.rt, frame.out)
+}
+
+func MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList {
+	return Default.MirrorScoreGroups(groups)
 }

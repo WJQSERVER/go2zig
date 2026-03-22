@@ -120,6 +120,18 @@ pub fn ownBucketList(value: []const api.Bucket) api.BucketList {
     return .{ .ptr = buf.ptr, .len = buf.len };
 }
 
+pub inline fn asScoreGroupList(value: api.ScoreGroupList) []const api.ScoreList {
+    if (value.ptr == null or value.len == 0) return &.{};
+    return value.ptr.?[0..value.len];
+}
+
+pub fn ownScoreGroupList(value: []const api.ScoreList) api.ScoreGroupList {
+    if (value.len == 0) return .{ .ptr = null, .len = 0 };
+    const buf = std.heap.smp_allocator.alloc(api.ScoreList, value.len) catch @panic("go2zig: alloc slice failed");
+    @memcpy(buf, value);
+    return .{ .ptr = buf.ptr, .len = buf.len };
+}
+
 pub const Optional_optional_1_u32 = extern struct {
     is_set: u8,
     value: u32,

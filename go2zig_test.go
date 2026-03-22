@@ -52,6 +52,11 @@ pub const BucketList = extern struct {
     len: usize,
 };
 
+pub const ScoreGroupList = extern struct {
+    ptr: ?[*]const ScoreList,
+    len: usize,
+};
+
 pub const UserKind = enum(u8) {
     guest,
     member,
@@ -107,6 +112,7 @@ pub extern fn mirror_buckets(buckets: BucketList) BucketList;
 pub extern fn maybe_kind(flag: bool) ?UserKind;
 pub extern fn maybe_digest(flag: bool) ?Digest;
 pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
+pub extern fn mirror_score_groups(groups: ScoreGroupList) ScoreGroupList;
 `
 
 const integrationLib = `
@@ -246,6 +252,16 @@ pub fn choose_limit(flag: bool, value: ?u32) ?u32 {
     if (!flag) return null;
     return if (value) |item| item + 1 else 1;
 }
+
+pub fn mirror_score_groups(groups: api.ScoreGroupList) api.ScoreGroupList {
+    const items = rt.asScoreGroupList(groups);
+    const out = std.heap.page_allocator.alloc(api.ScoreList, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |group, i| {
+        out[i] = rt.ownScoreList(rt.asScoreList(group));
+    }
+    return rt.ownScoreGroupList(out);
+}
 `
 
 func TestGenerateWritesGoFile(t *testing.T) {
@@ -301,6 +317,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 		"func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind",
 		"func (c *Go2ZigClient) MaybeDigest(flag bool) *Digest",
 		"func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32",
+		"func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList",
 		"type Go2ZigError struct",
 	}
 	for _, check := range checks {
@@ -408,6 +425,9 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind") {
 		t.Fatalf("generated file missing optional enum wrapper\n%s", string(content))
 	}
+	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList") {
+		t.Fatalf("generated file missing nested slice wrapper\n%s", string(content))
+	}
 }
 
 func TestBuilderGenerateOnly(t *testing.T) {
@@ -509,6 +529,7 @@ func main() {
 	base := uint32(9)
 	limit := ChooseLimit(true, &base)
 	defaultLimit := ChooseLimit(true, nil)
+	groups := MirrorScoreGroups(ScoreGroupList{ScoreList{1, 2}, ScoreList{3, 6, 9}})
 	checked, err := LoginChecked(LoginRequest{
 		User: User{ID: 7, Kind: UserKindMember, Name: "alice", Email: "alice@example.com", Scores: [3]uint16{3, 5, 8}},
 		Password: "secret-123",
@@ -523,7 +544,7 @@ func main() {
 	if err == nil {
 		panic("expected login_checked error")
 	}
-	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%d|%d|%t|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], users[1].Name, buckets[1].Scores[2], *kind, noKind == nil, (*digestPtr)[1], *limit+*defaultLimit, checked.Message, err != nil)
+	fmt.Printf("%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%s|%d|%d|%t|%d|%d|%d|%s|%v", resp.Message, string(resp.Token), renamed.Name, promoted.Kind, promoted.Scores[2], digest[1], scaled[2], history[1], duplicates[1][1], metrics[1].Scores[0], users[1].Name, buckets[1].Scores[2], *kind, noKind == nil, (*digestPtr)[1], *limit+*defaultLimit, groups[1][2], checked.Message, err != nil)
 }
 `)
 
@@ -534,7 +555,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("go run failed: %v\n%s", err, out)
 	}
-	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|9|2|true|8|11|welcome alice|true"; got != want {
+	if got, want := strings.TrimSpace(string(out)), "welcome alice|token-123|ally|2|34|5|18|2|6|13|bob|9|2|true|8|11|9|welcome alice|true"; got != want {
 		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }

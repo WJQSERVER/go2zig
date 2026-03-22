@@ -166,3 +166,13 @@ pub export fn go2zig_call_choose_limit(frame: *Go2ZigCallChooseLimit) void {
     frame.out = rt.fromOptional_optional_1_u32(result);
 }
 
+pub const Go2ZigCallMirrorScoreGroups = extern struct {
+    groups: api.ScoreGroupList,
+    out: api.ScoreGroupList,
+};
+
+pub export fn go2zig_call_mirror_score_groups(frame: *Go2ZigCallMirrorScoreGroups) void {
+    const result = impl.mirror_score_groups(frame.groups);
+    frame.out = result;
+}
+

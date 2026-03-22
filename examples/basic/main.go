@@ -81,9 +81,10 @@ func main() {
 	base := uint32(9)
 	limit := ChooseLimit(true, &base)
 	defaultLimit := ChooseLimit(true, nil)
+	groups := MirrorScoreGroups(ScoreGroupList{ScoreList{1, 2}, ScoreList{3, 6, 9}})
 
 	fmt.Printf("login ok=%v message=%q token=%q\n", resp.OK, resp.Message, string(resp.Token))
 	fmt.Printf("checked login ok=%v message=%q\n", checked.OK, checked.Message)
 	fmt.Printf("renamed user=%+v\n", renamed)
-	fmt.Printf("promoted kind=%d scores=%v digest=%v scaled=%v history=%v duplicates=%v metrics=%v users=%v buckets=%v optionalKind=%d noKind=%v optionalDigest=%d optionalLimit=%d\n", promoted.Kind, promoted.Scores, digest, scaled, history, duplicates, metrics, users, buckets, *kind, noKind == nil, (*digestPtr)[1], *limit+*defaultLimit)
+	fmt.Printf("promoted kind=%d scores=%v digest=%v scaled=%v history=%v duplicates=%v metrics=%v users=%v buckets=%v optionalKind=%d noKind=%v optionalDigest=%d optionalLimit=%d groups=%v\n", promoted.Kind, promoted.Scores, digest, scaled, history, duplicates, metrics, users, buckets, *kind, noKind == nil, (*digestPtr)[1], *limit+*defaultLimit, groups)
 }

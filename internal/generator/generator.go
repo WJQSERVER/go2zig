@@ -1005,17 +1005,30 @@ func renderRefSlice(item *model.Slice) string {
 	b.WriteString("\tif len(value) == 0 {\n\t\treturn ")
 	b.WriteString(refSliceResultName(item.Name))
 	b.WriteString("{}\n\t}\n")
-	if item.Elem.Kind == model.TypeStruct {
+	if item.Elem.Kind == model.TypeStruct || item.Elem.Kind == model.TypeSlice || item.Elem.Kind == model.TypeOptional {
 		b.WriteString("\tbuf := make([]")
 		b.WriteString(abiType(item.Elem))
 		b.WriteString(", len(value))\n")
 		b.WriteString("\tvar keep []any\n")
 		b.WriteString("\tfor i := range value {\n")
-		b.WriteString("\t\titem := ")
-		b.WriteString(refFuncName(item.Elem.Name))
-		b.WriteString("(value[i])\n")
-		b.WriteString("\t\tbuf[i] = item.value\n")
-		b.WriteString("\t\tkeep = append(keep, item.keep...)\n")
+		switch item.Elem.Kind {
+		case model.TypeStruct:
+			b.WriteString("\t\titem := ")
+			b.WriteString(refFuncName(item.Elem.Name))
+			b.WriteString("(value[i])\n")
+			b.WriteString("\t\tbuf[i] = item.value\n")
+			b.WriteString("\t\tkeep = append(keep, item.keep...)\n")
+		case model.TypeSlice:
+			b.WriteString("\t\titem := ")
+			b.WriteString(refSliceFuncName(item.Elem.Name))
+			b.WriteString("(value[i])\n")
+			b.WriteString("\t\tbuf[i] = item.slice\n")
+			b.WriteString("\t\tkeep = append(keep, item.keep...)\n")
+		case model.TypeOptional:
+			b.WriteString("\t\tbuf[i] = ")
+			b.WriteString(optionalRefFuncName(item.Elem))
+			b.WriteString("(value[i])\n")
+		}
 		b.WriteString("\t}\n")
 		b.WriteString("\treturn ")
 		b.WriteString(refSliceResultName(item.Name))

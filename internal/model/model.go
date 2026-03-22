@@ -505,6 +505,11 @@ func (a *API) IsPOD(t TypeRef) bool {
 			return false
 		}
 		return a.IsPOD(*t.Elem)
+	case TypeSlice:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
 	case TypeArray:
 		if t.Elem == nil {
 			return false
@@ -531,6 +536,11 @@ func (a *API) SupportsSliceElem(t TypeRef) bool {
 	case TypePrimitive, TypeEnum, TypeString, TypeBytes:
 		return true
 	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
+	case TypeSlice:
 		if t.Elem == nil {
 			return false
 		}

@@ -141,3 +141,13 @@ pub fn choose_limit(flag: bool, value: ?u32) ?u32 {
     if (!flag) return null;
     return if (value) |item| item + 1 else 1;
 }
+
+pub fn mirror_score_groups(groups: api.ScoreGroupList) api.ScoreGroupList {
+    const items = rt.asScoreGroupList(groups);
+    const out = std.heap.page_allocator.alloc(api.ScoreList, items.len) catch @panic("alloc failed");
+    defer std.heap.page_allocator.free(out);
+    for (items, 0..) |group, i| {
+        out[i] = rt.ownScoreList(rt.asScoreList(group));
+    }
+    return rt.ownScoreGroupList(out);
+}
