@@ -55,8 +55,7 @@
     CALL    AX                                               \
     RESTORE_SHADOW                                           \
     POPQ    g                                                \
-    POPQ    SP                                               \
-    RET
+    POPQ    SP
 
 #define ASMCALL_NORET                                        \
     SHADOW_SPACE                                             \
@@ -67,8 +66,7 @@
 #define ASMCALL_R1                                           \
     SHADOW_SPACE                                             \
     CALL    AX                                               \
-    RESTORE_SHADOW                                           \
-    RET
+    RESTORE_SHADOW
 
 TEXT ·CallFuncG0P0(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -77,6 +75,8 @@ TEXT ·CallFuncG0P0(SB), NOSPLIT|NOPTR|NOFRAME, $0
 TEXT ·CallFuncG0P0R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-16
 	MOVQ	fn+0x0(FP), AX
 	G0ASMCALL_R1
+	MOVQ	RRET, ret+8(FP)
+	RET
 
 TEXT ·CallFuncG0P1(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -87,6 +87,8 @@ TEXT ·CallFuncG0P1R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-24
 	MOVQ	fn+0x0(FP), AX
 	MOVQ	arg0+0x8(FP), RARG0
 	G0ASMCALL_R1
+	MOVQ	RRET, ret+16(FP)
+	RET
 
 TEXT ·CallFuncG0P2(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -99,6 +101,8 @@ TEXT ·CallFuncG0P2R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-32
 	MOVQ	arg0+0x8(FP), RARG0
 	MOVQ	arg1+0x10(FP), RARG1
 	G0ASMCALL_R1
+	MOVQ	RRET, ret+24(FP)
+	RET
 
 TEXT ·CallFuncG0P3(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -113,6 +117,8 @@ TEXT ·CallFuncG0P3R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-40
 	MOVQ	arg1+0x10(FP), RARG1
 	MOVQ	arg2+0x18(FP), RARG2
 	G0ASMCALL_R1
+	MOVQ	RRET, ret+32(FP)
+	RET
 
 TEXT ·CallFuncP0(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -121,6 +127,8 @@ TEXT ·CallFuncP0(SB), NOSPLIT|NOPTR|NOFRAME, $0
 TEXT ·CallFuncP0R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-16
 	MOVQ	fn+0x0(FP), AX
 	ASMCALL_R1
+	MOVQ	RRET, ret+8(FP)
+	RET
 
 TEXT ·CallFuncP1(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -131,6 +139,8 @@ TEXT ·CallFuncP1R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-24
 	MOVQ	fn+0x0(FP), AX
 	MOVQ	arg0+0x8(FP), RARG0
 	ASMCALL_R1
+	MOVQ	RRET, ret+16(FP)
+	RET
 
 TEXT ·CallFuncP2(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -143,6 +153,8 @@ TEXT ·CallFuncP2R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-32
 	MOVQ	arg0+0x8(FP), RARG0
 	MOVQ	arg1+0x10(FP), RARG1
 	ASMCALL_R1
+	MOVQ	RRET, ret+24(FP)
+	RET
 
 TEXT ·CallFuncP3(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -157,3 +169,5 @@ TEXT ·CallFuncP3R1(SB), NOSPLIT|NOPTR|NOFRAME, $0-40
 	MOVQ	arg1+0x10(FP), RARG1
 	MOVQ	arg2+0x18(FP), RARG2
 	ASMCALL_R1
+	MOVQ	RRET, ret+32(FP)
+	RET

@@ -2,6 +2,7 @@
 
 package dynlib
 
+import _ "go2zig/asmcall"
 import _ "unsafe"
 import "unsafe"
 
