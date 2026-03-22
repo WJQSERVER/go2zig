@@ -11,6 +11,7 @@ func TestSortedStructs(t *testing.T) {
 			{Name: "User", Fields: []Field{{Name: "id", Type: TypeRef{Kind: TypePrimitive, Name: "u64", Raw: "u64", Primitive: PrimitiveInfo{Go: "uint64"}}}}},
 		},
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -37,6 +38,7 @@ func TestSortedStructsRejectsCycle(t *testing.T) {
 			{Name: "B", Fields: []Field{{Name: "a", Type: TypeRef{Kind: TypeStruct, Name: "A", Raw: "A"}}}},
 		},
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -55,6 +57,7 @@ func TestTypeNeedsAllocationAndArena(t *testing.T) {
 			{Name: "User", Fields: []Field{{Name: "name", Type: TypeRef{Kind: TypeString, Name: "String", Raw: "String"}}}},
 			{Name: "Wrapper", Fields: []Field{{Name: "user", Type: TypeRef{Kind: TypeStruct, Name: "User", Raw: "User"}}}},
 		},
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -77,5 +80,30 @@ func TestTypeNeedsAllocationAndArena(t *testing.T) {
 	}
 	if !api.FunctionNeedsArena(fn) {
 		t.Fatal("FunctionNeedsArena(rename_user) = false, want true")
+	}
+}
+
+func TestNewResolvesEnumsAndArrays(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		[]*Struct{{
+			Name: "User",
+			Fields: []Field{
+				{Name: "kind", Type: TypeRef{Kind: TypeStruct, Name: "UserKind", Raw: "UserKind"}},
+				{Name: "scores", Type: TypeRef{Kind: TypeArray, Raw: "[3]u16", ArrayLen: 3, Elem: &TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}},
+			},
+		}},
+		[]*Enum{{Name: "UserKind", BaseName: "u8", Values: []EnumValue{{Name: "guest"}, {Name: "member"}}}},
+		[]*Function{{Name: "digest", Return: TypeRef{Kind: TypeArray, Raw: "[3]UserKind", ArrayLen: 3, Elem: &TypeRef{Kind: TypeStruct, Name: "UserKind", Raw: "UserKind"}}}},
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := api.Struct("User").Fields[0].Type.Kind; got != TypeEnum {
+		t.Fatalf("User.kind kind = %v, want enum", got)
+	}
+	if got := api.Funcs[0].Return.Elem.Kind; got != TypeEnum {
+		t.Fatalf("digest elem kind = %v, want enum", got)
 	}
 }

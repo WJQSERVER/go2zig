@@ -49,3 +49,23 @@ pub export fn go2zig_call_rename_user(frame: *Go2ZigCallRenameUser) void {
     frame.out = impl.rename_user(frame.user, frame.next_name);
 }
 
+pub const Go2ZigCallPromoteUser = extern struct {
+    user: api.User,
+    next_kind: api.UserKind,
+    next_scores: [3]u16,
+    out: api.User,
+};
+
+pub export fn go2zig_call_promote_user(frame: *Go2ZigCallPromoteUser) void {
+    frame.out = impl.promote_user(frame.user, frame.next_kind, frame.next_scores);
+}
+
+pub const Go2ZigCallDigestName = extern struct {
+    name: api.String,
+    out: [4]u8,
+};
+
+pub export fn go2zig_call_digest_name(frame: *Go2ZigCallDigestName) void {
+    frame.out = impl.digest_name(frame.name);
+}
+

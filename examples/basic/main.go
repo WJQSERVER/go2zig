@@ -18,18 +18,22 @@ func main() {
 
 	resp := Login(LoginRequest{
 		User: User{
-			ID:    7,
-			Name:  "alice",
-			Email: "alice@example.com",
+			ID:     7,
+			Kind:   UserKindMember,
+			Name:   "alice",
+			Email:  "alice@example.com",
+			Scores: [3]uint16{3, 5, 8},
 		},
 		Password: "secret-123",
 	})
 
 	checked, err := LoginChecked(LoginRequest{
 		User: User{
-			ID:    7,
-			Name:  "alice",
-			Email: "alice@example.com",
+			ID:     7,
+			Kind:   UserKindMember,
+			Name:   "alice",
+			Email:  "alice@example.com",
+			Scores: [3]uint16{3, 5, 8},
 		},
 		Password: "secret-123",
 	})
@@ -39,9 +43,11 @@ func main() {
 
 	if _, err := LoginChecked(LoginRequest{
 		User: User{
-			ID:    7,
-			Name:  "alice",
-			Email: "alice@example.com",
+			ID:     7,
+			Kind:   UserKindMember,
+			Name:   "alice",
+			Email:  "alice@example.com",
+			Scores: [3]uint16{3, 5, 8},
 		},
 		Password: "bad",
 	}); err == nil {
@@ -49,12 +55,23 @@ func main() {
 	}
 
 	renamed := RenameUser(User{
-		ID:    7,
-		Name:  "alice",
-		Email: "alice@example.com",
+		ID:     7,
+		Kind:   UserKindMember,
+		Name:   "alice",
+		Email:  "alice@example.com",
+		Scores: [3]uint16{3, 5, 8},
 	}, "ally")
+	promoted := PromoteUser(User{
+		ID:     7,
+		Kind:   UserKindMember,
+		Name:   "alice",
+		Email:  "alice@example.com",
+		Scores: [3]uint16{3, 5, 8},
+	}, UserKindAdmin, [3]uint16{13, 21, 34})
+	digest := DigestName("alice")
 
 	fmt.Printf("login ok=%v message=%q token=%q\n", resp.OK, resp.Message, string(resp.Token))
 	fmt.Printf("checked login ok=%v message=%q\n", checked.OK, checked.Message)
 	fmt.Printf("renamed user=%+v\n", renamed)
+	fmt.Printf("promoted kind=%d scores=%v digest=%v\n", promoted.Kind, promoted.Scores, digest)
 }

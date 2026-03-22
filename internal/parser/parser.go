@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"go2zig/internal/model"
@@ -11,7 +12,9 @@ import (
 
 var (
 	structPattern = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{(.*?)\}\s*;`)
-	funcPattern   = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
+	enumPattern   = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*enum\s*\(([^)]+)\)\s*\{(.*?)\}\s*;`)
+	funcPattern   = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
+	arrayPattern  = regexp.MustCompile(`^\[(\d+)\](.+)$`)
 )
 
 func ParseFile(path string) (*model.API, error) {
@@ -28,11 +31,15 @@ func Parse(content string) (*model.API, error) {
 	if err != nil {
 		return nil, err
 	}
+	enums, err := parseEnums(clean)
+	if err != nil {
+		return nil, err
+	}
 	funcs, err := parseFunctions(clean)
 	if err != nil {
 		return nil, err
 	}
-	return model.New(structs, funcs)
+	return model.New(structs, enums, funcs)
 }
 
 func parseStructs(content string) ([]*model.Struct, error) {
@@ -49,6 +56,46 @@ func parseStructs(content string) ([]*model.Struct, error) {
 		structs = append(structs, &model.Struct{Name: match[1], Fields: fields})
 	}
 	return structs, nil
+}
+
+func parseEnums(content string) ([]*model.Enum, error) {
+	matches := enumPattern.FindAllStringSubmatch(content, -1)
+	enums := make([]*model.Enum, 0, len(matches))
+	for _, match := range matches {
+		values, err := parseEnumValues(match[3])
+		if err != nil {
+			return nil, fmt.Errorf("parse enum %q: %w", match[1], err)
+		}
+		enums = append(enums, &model.Enum{Name: match[1], BaseName: strings.TrimSpace(match[2]), Values: values})
+	}
+	return enums, nil
+}
+
+func parseEnumValues(body string) ([]model.EnumValue, error) {
+	parts := strings.Split(body, ",")
+	values := make([]model.EnumValue, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		name := part
+		value := ""
+		if idx := strings.Index(part, "="); idx >= 0 {
+			name = strings.TrimSpace(part[:idx])
+			value = strings.TrimSpace(part[idx+1:])
+		}
+		if !isIdent(name) {
+			return nil, fmt.Errorf("invalid enum value %q", part)
+		}
+		if _, ok := seen[name]; ok {
+			return nil, fmt.Errorf("duplicate enum value %q", name)
+		}
+		seen[name] = struct{}{}
+		values = append(values, model.EnumValue{Name: name, Value: value})
+	}
+	return values, nil
 }
 
 func parseFunctions(content string) ([]*model.Function, error) {
@@ -75,9 +122,6 @@ func parseReturnType(raw string) (model.TypeRef, bool, error) {
 	}
 	if strings.Contains(raw, "!") {
 		idx := strings.Index(raw, "!")
-		if idx < 0 {
-			return model.TypeRef{}, false, fmt.Errorf("error union payload is empty")
-		}
 		payload := strings.TrimSpace(raw[idx+1:])
 		if payload == "" {
 			return model.TypeRef{}, false, fmt.Errorf("error union payload is empty")
@@ -85,17 +129,8 @@ func parseReturnType(raw string) (model.TypeRef, bool, error) {
 		t, err := parseType(payload)
 		return t, true, err
 	}
-	idx := strings.LastIndex(raw, "!")
-	if idx < 0 {
-		t, err := parseType(raw)
-		return t, false, err
-	}
-	payload := strings.TrimSpace(raw[idx+1:])
-	if payload == "" {
-		return model.TypeRef{}, false, fmt.Errorf("error union payload is empty")
-	}
-	t, err := parseType(payload)
-	return t, true, err
+	t, err := parseType(raw)
+	return t, false, err
 }
 
 func parseFields(body string) ([]model.Field, error) {
@@ -139,6 +174,17 @@ func parseType(raw string) (model.TypeRef, error) {
 	}
 	for strings.HasPrefix(raw, "?") {
 		raw = strings.TrimSpace(strings.TrimPrefix(raw, "?"))
+	}
+	if match := arrayPattern.FindStringSubmatch(raw); match != nil {
+		length, err := strconv.Atoi(match[1])
+		if err != nil {
+			return model.TypeRef{}, fmt.Errorf("invalid array length %q", match[1])
+		}
+		elem, err := parseType(strings.TrimSpace(match[2]))
+		if err != nil {
+			return model.TypeRef{}, err
+		}
+		return model.TypeRef{Kind: model.TypeArray, Raw: raw, Elem: &elem, ArrayLen: length}, nil
 	}
 	raw = strings.TrimPrefix(raw, "[*]const ")
 	raw = strings.TrimPrefix(raw, "[*]")

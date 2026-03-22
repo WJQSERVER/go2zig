@@ -58,6 +58,8 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 建议注意：
 
 - `String` 和 `Bytes` 是约定好的桥接类型别名
+- 可以声明 `enum(u8)`、`enum(u16)`、`enum(u32)` 等整型枚举
+- 可以声明固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]UserKind`
 - 业务 struct 用 `extern struct`
 - 函数声明用 `pub extern fn`
 - `error union` 当前建议优先使用命名 error set，例如 `LoginError!LoginResponse`
@@ -141,6 +143,11 @@ _ = resp
 
 - 顶层函数：`Login(...)`
 - client 方法：`Default.Login(...)` 或 `NewGo2ZigClient(path)`
+
+对于新增支持的类型：
+
+- Zig `enum(u8)` 会生成 Go 命名类型和对应常量
+- Zig `[N]T` 会生成 Go `[N]T` 数组，并自动做 ABI 转换
 
 ## 6. 自定义动态库路径
 

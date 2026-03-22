@@ -19,6 +19,7 @@ pub fn login(req: api.LoginRequest) api.LoginResponse {
         .ok = ok,
         .message = rt.ownString(message),
         .token = if (ok) rt.ownBytes("token-123") else rt.ownBytes(&.{}),
+        .digest = .{ 1, 2, 3, 4 },
     };
 }
 
@@ -28,13 +29,36 @@ pub fn login_checked(req: api.LoginRequest) api.LoginError!api.LoginResponse {
         .ok = true,
         .message = rt.ownString("welcome alice"),
         .token = rt.ownBytes("token-123"),
+        .digest = .{ 1, 2, 3, 4 },
     };
 }
 
 pub fn rename_user(user: api.User, next_name: api.String) api.User {
     return .{
         .id = user.id,
+        .kind = user.kind,
         .name = rt.ownString(rt.asSlice(next_name)),
         .email = rt.ownString(rt.asSlice(user.email)),
+        .scores = user.scores,
+    };
+}
+
+pub fn promote_user(user: api.User, next_kind: api.UserKind, next_scores: [3]u16) api.User {
+    return .{
+        .id = user.id,
+        .kind = next_kind,
+        .name = rt.ownString(rt.asSlice(user.name)),
+        .email = rt.ownString(rt.asSlice(user.email)),
+        .scores = next_scores,
+    };
+}
+
+pub fn digest_name(name: api.String) [4]u8 {
+    const value = rt.asSlice(name);
+    return .{
+        if (value.len > 0) value[0] else 0,
+        @as(u8, @intCast(value.len)),
+        0xAB,
+        0xCD,
     };
 }
