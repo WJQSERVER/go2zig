@@ -165,6 +165,60 @@ func TestOptionalPODTraits(t *testing.T) {
 	}
 }
 
+func TestNewRejectsDuplicateArrayAlias(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(
+		nil,
+		nil,
+		nil,
+		[]*ArrayAlias{{Name: "Digest", Type: TypeRef{Kind: TypeArray, Raw: "[4]u8", ArrayLen: 4, Elem: &TypeRef{Kind: TypePrimitive, Name: "u8", Raw: "u8", Primitive: PrimitiveInfo{Go: "uint8", Zig: "u8"}}}}, {Name: "Digest", Type: TypeRef{Kind: TypeArray, Raw: "[8]u8", ArrayLen: 8, Elem: &TypeRef{Kind: TypePrimitive, Name: "u8", Raw: "u8", Primitive: PrimitiveInfo{Go: "uint8", Zig: "u8"}}}}},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("New() error = nil, want duplicate array alias error")
+	}
+}
+
+func TestNewResolvesArrayAliasInFunctions(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		nil,
+		nil,
+		nil,
+		[]*ArrayAlias{{Name: "Digest", Type: TypeRef{Kind: TypeArray, Raw: "[4]u8", ArrayLen: 4, Elem: &TypeRef{Kind: TypePrimitive, Name: "u8", Raw: "u8", Primitive: PrimitiveInfo{Go: "uint8", Zig: "u8"}}}}},
+		[]*Function{{Name: "digest_name", Return: TypeRef{Kind: TypeStruct, Name: "Digest", Raw: "Digest"}}},
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := api.Funcs[0].Return.Kind; got != TypeArray {
+		t.Fatalf("digest_name return kind = %v, want array", got)
+	}
+	if got := api.Funcs[0].Return.Alias; got != "Digest" {
+		t.Fatalf("digest_name return alias = %q, want Digest", got)
+	}
+}
+
+func TestTypeNeedsKeepAliveForNestedSliceFields(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		[]*Struct{{Name: "Bucket", Fields: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}}},
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.TypeNeedsKeepAlive(TypeRef{Kind: TypeStruct, Name: "Bucket", Raw: "Bucket"}) {
+		t.Fatal("Bucket should require keepalive because it contains a slice field")
+	}
+}
+
 func TestStructSliceElemSupportMatrix(t *testing.T) {
 	t.Parallel()
 

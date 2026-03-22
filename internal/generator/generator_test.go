@@ -108,6 +108,7 @@ func TestRender(t *testing.T) {
 		"func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList",
 		"type _go2zigOptional_optional_",
 		"func _go2zigRefOptional_",
+		"func _go2zigRefScoreGroupList(value ScoreGroupList) _go2zigRefScoreGroupListResult",
 		"func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult",
 		"func _go2zigRefUserList(value UserList) _go2zigRefUserListResult",
 		"func _go2zigRefBucketList(value BucketList) _go2zigRefBucketListResult",
@@ -126,6 +127,9 @@ func TestRender(t *testing.T) {
 	if !strings.Contains(runtimeText, "std.heap.smp_allocator") {
 		t.Fatalf("RenderZigRuntime() should use smp_allocator\n%s", runtimeText)
 	}
+	if !strings.Contains(runtimeText, "pub const Optional_optional_") {
+		t.Fatalf("RenderZigRuntime() should emit optional wrapper helpers\n%s", runtimeText)
+	}
 	bridgeText := string(RenderZigBridge(api, Config{APIModule: "api.zig", ImplModule: "lib.zig"}))
 	if !strings.Contains(bridgeText, "pub export fn go2zig_call_login") {
 		t.Fatalf("RenderZigBridge() missing exported login bridge\n%s", bridgeText)
@@ -135,6 +139,9 @@ func TestRender(t *testing.T) {
 	}
 	if !strings.Contains(bridgeText, "pub export fn go2zig_free_buf") {
 		t.Fatalf("RenderZigBridge() missing free bridge\n%s", bridgeText)
+	}
+	if !strings.Contains(bridgeText, "rt.toOptional_") {
+		t.Fatalf("RenderZigBridge() missing optional input conversion\n%s", bridgeText)
 	}
 }
 
