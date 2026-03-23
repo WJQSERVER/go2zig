@@ -133,7 +133,7 @@ func (rt *_go2zigRuntime) Load() error {
 }
 
 func (rt *_go2zigRuntime) free(ptr unsafe.Pointer, len uintptr) {
-	if ptr == nil {
+	if ptr == nil || len == 0 {
 		return
 	}
 	if err := rt.Load(); err != nil {

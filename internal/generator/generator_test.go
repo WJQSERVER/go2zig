@@ -116,6 +116,7 @@ func TestRender(t *testing.T) {
 		"func _go2zigRefArray_",
 		"go2zig_call_login",
 		"type Go2ZigError struct",
+		"if ptr == nil || len == 0 {",
 	}
 	for _, check := range checks {
 		if !strings.Contains(content, check) {

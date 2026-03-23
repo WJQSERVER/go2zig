@@ -47,3 +47,10 @@ func TestOwnBytesAllowsZeroLengthWithNonNilPointer(t *testing.T) {
 		t.Fatalf("_go2zigOwnBytes() = %v, want empty slice", value)
 	}
 }
+
+func TestRuntimeFreeSkipsZeroLengthPointer(t *testing.T) {
+	t.Parallel()
+
+	rt := &_go2zigRuntime{}
+	rt.free(unsafe.Pointer(new(byte)), 0)
+}

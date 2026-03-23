@@ -92,7 +92,7 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	body.WriteString("\treturn rt.err\n")
 	body.WriteString("}\n\n")
 	body.WriteString("func (rt *_go2zigRuntime) free(ptr unsafe.Pointer, len uintptr) {\n")
-	body.WriteString("\tif ptr == nil {\n\t\treturn\n\t}\n")
+	body.WriteString("\tif ptr == nil || len == 0 {\n\t\treturn\n\t}\n")
 	body.WriteString("\tif err := rt.Load(); err != nil {\n\t\tpanic(err)\n\t}\n")
 	body.WriteString("\tasmcall.CallFuncG0P2(unsafe.Pointer(rt.freeBuf), ptr, unsafe.Pointer(len))\n")
 	body.WriteString("}\n\n")
