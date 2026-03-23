@@ -1,5 +1,7 @@
 # go2zig
 
+语言: [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
+
 一个轻量级、高性能的 Go 到 Zig FFI 代码生成器，灵感来自 [rust2go](https://github.com/ihciah/rust2go)。
 
 ## 核心特性
