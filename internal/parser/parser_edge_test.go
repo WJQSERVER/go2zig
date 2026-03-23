@@ -112,3 +112,29 @@ func TestParseRejectsStringSliceAlias(t *testing.T) {
 		t.Fatalf("Parse() error = %q, want unsupported element type message", err)
 	}
 }
+
+func TestParseRecognizesCRLFSliceAlias(t *testing.T) {
+	t.Parallel()
+
+	content := strings.ReplaceAll(`
+        pub const ScoreList = extern struct {
+            ptr: ?[*]const u16,
+            len: usize,
+        };
+        pub extern fn mirror(scores: ScoreList) ScoreList;
+    `, "\n", "\r\n")
+
+	api, err := Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(api.Slices) != 1 {
+		t.Fatalf("Parse() slices = %d, want 1", len(api.Slices))
+	}
+	if len(api.Structs) != 0 {
+		t.Fatalf("Parse() structs = %d, want 0", len(api.Structs))
+	}
+	if got := api.Funcs[0].Params[0].Type.Kind; got != model.TypeSlice {
+		t.Fatalf("mirror param kind = %v, want slice", got)
+	}
+}

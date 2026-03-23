@@ -119,6 +119,7 @@ func isSliceStruct(body string) bool {
 	body = strings.TrimSpace(body)
 	compact := strings.ReplaceAll(body, " ", "")
 	compact = strings.ReplaceAll(compact, "\n", "")
+	compact = strings.ReplaceAll(compact, "\r", "")
 	compact = strings.ReplaceAll(compact, "\t", "")
 	return strings.HasPrefix(compact, "ptr:?[*]const") && strings.Contains(compact, ",len:usize")
 }

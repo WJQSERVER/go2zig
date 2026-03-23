@@ -127,6 +127,24 @@ func TestRender(t *testing.T) {
 	if !strings.Contains(runtimeText, "std.heap.smp_allocator") {
 		t.Fatalf("RenderZigRuntime() should use smp_allocator\n%s", runtimeText)
 	}
+	for _, check := range []string{
+		"pub fn ownString(value: []const u8) api.String {\n    if (value.len == 0) return .{ .ptr = undefined, .len = 0 };",
+		"pub fn ownBytes(value: []const u8) api.Bytes {\n    if (value.len == 0) return .{ .ptr = undefined, .len = 0 };",
+		"pub fn okError() ErrorInfo {\n    return .{ .code = 0, .text = .{ .ptr = undefined, .len = 0 } };",
+	} {
+		if !strings.Contains(runtimeText, check) {
+			t.Fatalf("RenderZigRuntime() missing %q\n%s", check, runtimeText)
+		}
+	}
+	if strings.Contains(runtimeText, "pub fn ownString(value: []const u8) api.String {\n    if (value.len == 0) return .{ .ptr = null, .len = 0 };") {
+		t.Fatalf("RenderZigRuntime() should not emit null in ownString\n%s", runtimeText)
+	}
+	if strings.Contains(runtimeText, "pub fn ownBytes(value: []const u8) api.Bytes {\n    if (value.len == 0) return .{ .ptr = null, .len = 0 };") {
+		t.Fatalf("RenderZigRuntime() should not emit null in ownBytes\n%s", runtimeText)
+	}
+	if strings.Contains(runtimeText, "pub fn okError() ErrorInfo {\n    return .{ .code = 0, .text = .{ .ptr = null, .len = 0 } };") {
+		t.Fatalf("RenderZigRuntime() should not emit null in okError\n%s", runtimeText)
+	}
 	if !strings.Contains(runtimeText, "pub const Optional_optional_") {
 		t.Fatalf("RenderZigRuntime() should emit optional wrapper helpers\n%s", runtimeText)
 	}

@@ -235,7 +235,13 @@ func _go2zigOwnBytes(rt *_go2zigRuntime, value _go2zigBytes) []byte {
 }
 
 func _go2zigAssertSpan(name string, ptr unsafe.Pointer, len uintptr) {
-	if (ptr == nil) != (len == 0) {
+	if ptr == nil && len == 0 {
+		return
+	}
+	if len == 0 {
+		return
+	}
+	if ptr == nil {
 		panic(fmt.Sprintf("go2zig: invalid %s buffer state ptr=%p len=%d", name, ptr, len))
 	}
 }
