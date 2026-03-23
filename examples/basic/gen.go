@@ -214,7 +214,8 @@ func _go2zigRefBytes(value []byte) _go2zigBytes {
 }
 
 func _go2zigOwnString(rt *_go2zigRuntime, value _go2zigString) string {
-	if value.Ptr == nil || value.Len == 0 {
+	_go2zigAssertSpan("String", value.Ptr, value.Len)
+	if value.Ptr == nil {
 		return ""
 	}
 	bytes := unsafe.Slice((*byte)(value.Ptr), int(value.Len))
@@ -224,12 +225,19 @@ func _go2zigOwnString(rt *_go2zigRuntime, value _go2zigString) string {
 }
 
 func _go2zigOwnBytes(rt *_go2zigRuntime, value _go2zigBytes) []byte {
-	if value.Ptr == nil || value.Len == 0 {
+	_go2zigAssertSpan("Bytes", value.Ptr, value.Len)
+	if value.Ptr == nil {
 		return nil
 	}
 	ret := append([]byte(nil), unsafe.Slice((*byte)(value.Ptr), int(value.Len))...)
 	rt.free(value.Ptr, value.Len)
 	return ret
+}
+
+func _go2zigAssertSpan(name string, ptr unsafe.Pointer, len uintptr) {
+	if (ptr == nil) != (len == 0) {
+		panic(fmt.Sprintf("go2zig: invalid %s buffer state ptr=%p len=%d", name, ptr, len))
+	}
 }
 
 func _go2zigOwnError(rt *_go2zigRuntime, value _go2zigError) error {
@@ -350,7 +358,8 @@ func _go2zigRefScoreList(value ScoreList) _go2zigRefScoreListResult {
 }
 
 func _go2zigOwnScoreList(rt *_go2zigRuntime, value _go2zigScoreList) ScoreList {
-	if value.ptr == nil || value.len == 0 {
+	_go2zigAssertSpan("ScoreList", value.ptr, value.len)
+	if value.ptr == nil {
 		return nil
 	}
 	src := unsafe.Slice((*uint16)(value.ptr), int(value.len))
@@ -382,7 +391,8 @@ func _go2zigRefUserKindList(value UserKindList) _go2zigRefUserKindListResult {
 }
 
 func _go2zigOwnUserKindList(rt *_go2zigRuntime, value _go2zigUserKindList) UserKindList {
-	if value.ptr == nil || value.len == 0 {
+	_go2zigAssertSpan("UserKindList", value.ptr, value.len)
+	if value.ptr == nil {
 		return nil
 	}
 	src := unsafe.Slice((*uint8)(value.ptr), int(value.len))
@@ -414,7 +424,8 @@ func _go2zigRefDigestList(value DigestList) _go2zigRefDigestListResult {
 }
 
 func _go2zigOwnDigestList(rt *_go2zigRuntime, value _go2zigDigestList) DigestList {
-	if value.ptr == nil || value.len == 0 {
+	_go2zigAssertSpan("DigestList", value.ptr, value.len)
+	if value.ptr == nil {
 		return nil
 	}
 	src := unsafe.Slice((*[4]uint8)(value.ptr), int(value.len))
@@ -453,7 +464,8 @@ func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult {
 }
 
 func _go2zigOwnMetricList(rt *_go2zigRuntime, value _go2zigMetricList) MetricList {
-	if value.ptr == nil || value.len == 0 {
+	_go2zigAssertSpan("MetricList", value.ptr, value.len)
+	if value.ptr == nil {
 		return nil
 	}
 	src := unsafe.Slice((*_go2zigMetric)(value.ptr), int(value.len))
@@ -492,7 +504,8 @@ func _go2zigRefUserList(value UserList) _go2zigRefUserListResult {
 }
 
 func _go2zigOwnUserList(rt *_go2zigRuntime, value _go2zigUserList) UserList {
-	if value.ptr == nil || value.len == 0 {
+	_go2zigAssertSpan("UserList", value.ptr, value.len)
+	if value.ptr == nil {
 		return nil
 	}
 	src := unsafe.Slice((*_go2zigUser)(value.ptr), int(value.len))
@@ -531,7 +544,8 @@ func _go2zigRefBucketList(value BucketList) _go2zigRefBucketListResult {
 }
 
 func _go2zigOwnBucketList(rt *_go2zigRuntime, value _go2zigBucketList) BucketList {
-	if value.ptr == nil || value.len == 0 {
+	_go2zigAssertSpan("BucketList", value.ptr, value.len)
+	if value.ptr == nil {
 		return nil
 	}
 	src := unsafe.Slice((*_go2zigBucket)(value.ptr), int(value.len))
@@ -570,7 +584,8 @@ func _go2zigRefScoreGroupList(value ScoreGroupList) _go2zigRefScoreGroupListResu
 }
 
 func _go2zigOwnScoreGroupList(rt *_go2zigRuntime, value _go2zigScoreGroupList) ScoreGroupList {
-	if value.ptr == nil || value.len == 0 {
+	_go2zigAssertSpan("ScoreGroupList", value.ptr, value.len)
+	if value.ptr == nil {
 		return nil
 	}
 	src := unsafe.Slice((*_go2zigScoreList)(value.ptr), int(value.len))

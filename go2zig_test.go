@@ -620,6 +620,135 @@ func main() {
 	}
 }
 
+func TestGeneratedClientFailsWhenSymbolMissing(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		t.Skip("missing symbol test currently targets windows/amd64")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "api.zig"), `pub extern fn health() bool;`)
+	outPath := filepath.Join(dir, "gen.go")
+	if err := Generate(GenerateConfig{API: filepath.Join(dir, "api.zig"), Output: outPath, PackageName: "sample", LibraryName: "sample", RuntimeZig: filepath.Join(dir, "go2zig_runtime.zig"), BridgeZig: filepath.Join(dir, "go2zig_exports.zig"), APIModule: "api.zig", ImplModule: "lib.zig"}); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile(gen) error = %v", err)
+	}
+	writeFile(t, outPath, string(content))
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/missingsymbol\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	testFile := filepath.Join(dir, "gen_test.go")
+	writeFile(t, testFile, `package sample
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestMissingSymbolLoad(t *testing.T) {
+	client := NewGo2ZigClient("kernel32.dll")
+	err := client.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want missing symbol error")
+	}
+	if !strings.Contains(err.Error(), "lookup go2zig_free_buf") {
+		t.Fatalf("Load() error = %q, want missing symbol message", err)
+	}
+}
+`)
+	cmd := exec.Command("go", "test", ".")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go test failed: %v\n%s", err, out)
+	}
+}
+
+func TestBuilderGeneratedProgramHandlesOptionalErrorSliceFailure(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		t.Skip("optional error slice runtime test currently targets windows/amd64")
+	}
+	if _, err := exec.LookPath("zig"); err != nil {
+		t.Skip("zig not available in PATH")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/optionalslice\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "api.zig"), `
+pub const String = extern struct {
+    ptr: [*]const u8,
+    len: usize,
+};
+
+pub const ScoreList = extern struct {
+    ptr: ?[*]const u16,
+    len: usize,
+};
+
+pub const PickError = error{Denied};
+
+pub extern fn maybe_scores(flag: bool, limit: ?u32) PickError!ScoreList;
+`)
+	writeFile(t, filepath.Join(dir, "lib.zig"), `
+const std = @import("std");
+const api = @import("api.zig");
+const rt = @import("go2zig_runtime.zig");
+
+pub fn maybe_scores(flag: bool, limit: ?u32) api.PickError!api.ScoreList {
+    if (!flag) return api.PickError.Denied;
+    if (limit) |value| {
+        const out = std.heap.page_allocator.alloc(u16, 1) catch @panic("alloc failed");
+        defer std.heap.page_allocator.free(out);
+        out[0] = @as(u16, @intCast(value + 1));
+        return rt.ownScoreList(out);
+    }
+    return rt.ownScoreList(&.{});
+}
+`)
+	outPath := filepath.Join(dir, "gen.go")
+	if err := NewBuilder().WithAPI(filepath.Join(dir, "api.zig")).WithZigSource(filepath.Join(dir, "lib.zig")).WithOutput(outPath).WithPackageName("main").WithLibraryName("sample").Build(); err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+	writeFile(t, filepath.Join(dir, "main.go"), `package main
+
+import "fmt"
+
+func main() {
+	if err := Default.Load(); err != nil {
+		panic(err)
+	}
+	value, err := MaybeScores(false, nil)
+	if err == nil {
+		panic("expected error")
+	}
+	if value != nil {
+		panic("expected nil slice on error")
+	}
+	okValue, err := MaybeScores(true, nil)
+	if err != nil {
+		panic(err)
+	}
+	limit := uint32(9)
+	limited, err := MaybeScores(true, &limit)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%v|%d|%d", value == nil, len(okValue), limited[0])
+}
+`)
+	cmd := exec.Command("go", "run", ".")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run failed: %v\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), "true|0|10"; got != want {
+		t.Fatalf("program output = %q, want %q", got, want)
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
