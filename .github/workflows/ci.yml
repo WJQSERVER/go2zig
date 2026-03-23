@@ -20,28 +20,24 @@ jobs:
             goarch: amd64
             run_tests: true
             run_bench: true
-            shell: powershell
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'; go build ./..."
           - os: windows-latest
             goos: windows
             goarch: arm64
             run_tests: false
             run_bench: false
-            shell: powershell
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./..."
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
             run_tests: true
             run_bench: false
-            shell: bash
             build_cmd: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./..."
           - os: ubuntu-latest
             goos: linux
             goarch: arm64
             run_tests: false
             run_bench: false
-            shell: bash
             build_cmd: "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./..."
     name: ${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ${{ matrix.os }}
@@ -63,5 +59,4 @@ jobs:
         if: ${{ matrix.run_bench }}
         run: go test -bench . ./asmcall
       - name: Cross-check build
-        shell: ${{ matrix.shell }}
         run: ${{ matrix.build_cmd }}
