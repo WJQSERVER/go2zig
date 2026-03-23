@@ -337,10 +337,17 @@ func TestGenerateWritesGoFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(bridge) error = %v", err)
 	}
-	if !strings.Contains(string(bridgeText), "pub export fn go2zig_call_login") {
+	bridge := string(bridgeText)
+	if !strings.Contains(bridge, `const api = @import("api.zig");`) {
+		t.Fatalf("bridge zig should import api by default name\n%s", bridgeText)
+	}
+	if !strings.Contains(bridge, `const impl = @import("lib.zig");`) {
+		t.Fatalf("bridge zig should import impl by default name\n%s", bridgeText)
+	}
+	if !strings.Contains(bridge, "pub export fn go2zig_call_login") {
 		t.Fatalf("bridge zig missing login export\n%s", bridgeText)
 	}
-	if !strings.Contains(string(bridgeText), "catch |err|") {
+	if !strings.Contains(bridge, "catch |err|") {
 		t.Fatalf("bridge zig should include error union catch path\n%s", bridgeText)
 	}
 }
@@ -432,6 +439,7 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 		outPath,
 		filepath.Join(dir, "go2zig_runtime.zig"),
 		filepath.Join(dir, "go2zig_exports.zig"),
+		filepath.Join(dir, "go2zig_build_root.zig"),
 		filepath.Join(dir, outputLibraryFilename("sample", true)),
 	} {
 		if _, err := os.Stat(path); err != nil {
@@ -474,6 +482,89 @@ func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList") {
 		t.Fatalf("generated file missing nested slice wrapper\n%s", string(content))
+	}
+}
+
+func TestBuilderBuildsAcrossDirectories(t *testing.T) {
+	zigPath, err := exec.LookPath("zig")
+	if err != nil {
+		t.Skip("zig not available in PATH")
+	}
+	_ = zigPath
+
+	root := t.TempDir()
+	apiDir := filepath.Join(root, "api")
+	zigDir := filepath.Join(root, "zig", "impl")
+	sharedDir := filepath.Join(root, "zig", "shared")
+	outDir := filepath.Join(root, "gen")
+	if err := os.MkdirAll(apiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(apiDir) error = %v", err)
+	}
+	if err := os.MkdirAll(zigDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(zigDir) error = %v", err)
+	}
+	if err := os.MkdirAll(sharedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(sharedDir) error = %v", err)
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(outDir) error = %v", err)
+	}
+
+	apiPath := filepath.Join(apiDir, "api.zig")
+	libPath := filepath.Join(zigDir, "lib.zig")
+	mathPath := filepath.Join(sharedDir, "math.zig")
+	outPath := filepath.Join(outDir, "gen.go")
+
+	writeFile(t, apiPath, `
+pub extern fn add(a: u32, b: u32) u32;
+`)
+	writeFile(t, mathPath, `
+pub fn add(a: u32, b: u32) u32 {
+    return a + b;
+}
+`)
+	writeFile(t, libPath, `
+const math = @import("../shared/math.zig");
+
+pub fn add(a: u32, b: u32) u32 {
+    return math.add(a, b);
+}
+`)
+
+	if err := NewBuilder().
+		WithAPI(apiPath).
+		WithZigSource(libPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		Build(); err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	bridgeText, err := os.ReadFile(filepath.Join(outDir, "go2zig_exports.zig"))
+	if err != nil {
+		t.Fatalf("ReadFile(bridge) error = %v", err)
+	}
+	bridge := string(bridgeText)
+	if !strings.Contains(bridge, `const api = @import("../api/api.zig");`) {
+		t.Fatalf("bridge missing relative api import\n%s", bridge)
+	}
+	if !strings.Contains(bridge, `const impl = @import("../zig/impl/lib.zig");`) {
+		t.Fatalf("bridge missing relative impl import\n%s", bridge)
+	}
+	moduleRoot, err := commonDir(filepath.Dir(apiPath), filepath.Dir(libPath), outDir)
+	if err != nil {
+		t.Fatalf("commonDir() error = %v", err)
+	}
+	buildRootText, err := os.ReadFile(filepath.Join(moduleRoot, "go2zig_build_root.zig"))
+	if err != nil {
+		t.Fatalf("ReadFile(build root) error = %v", err)
+	}
+	if !strings.Contains(string(buildRootText), `@import("./gen/go2zig_exports.zig")`) {
+		t.Fatalf("zig build root should import generated bridge\n%s", buildRootText)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, outputLibraryFilename("sample", true))); err != nil {
+		t.Fatalf("expected generated library missing: %v", err)
 	}
 }
 
@@ -663,6 +754,14 @@ func TestGeneratedClientFailsWhenSymbolMissing(t *testing.T) {
 		t.Fatalf("ReadFile(gen) error = %v", err)
 	}
 	writeFile(t, outPath, string(content))
+	bridgePath := filepath.Join(dir, "go2zig_exports.zig")
+	bridgeText, err := os.ReadFile(bridgePath)
+	if err != nil {
+		t.Fatalf("ReadFile(bridge) error = %v", err)
+	}
+	if !strings.Contains(string(bridgeText), `const api = @import("api.zig");`) {
+		t.Fatalf("bridge zig should keep direct api import when Generate is used directly\n%s", bridgeText)
+	}
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/missingsymbol\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
 	testFile := filepath.Join(dir, "gen_test.go")
 	writeFile(t, testFile, `package sample
