@@ -12,10 +12,11 @@ Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](
 
 当前支持：
 - `windows/amd64` - 完全支持，包含 CI 测试
+- `windows/arm64` - 无 cgo 汇编运行时已支持
 - `linux/amd64` - 完全支持，包含 CI 测试
+- `linux/arm64` - 无 cgo 汇编运行时已支持
 
 不支持：
-- `arm64` - 计划未来实现
 - `macOS` - 当前不支持
 - 其他架构 - 当前不支持
 
@@ -66,7 +67,7 @@ Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](
 
 ## 当前限制
 
-1. **平台限制**：仅支持 amd64 架构的 Windows 和 Linux
+1. **平台限制**：仅支持 Windows 和 Linux 上的 `amd64` / `arm64`
 2. **类型限制**：不支持 Go 的 map、channel、interface 等特有类型
 3. **内存管理**：固定的分配模式，无法自定义分配器
 4. **性能开销**：每次调用需要数据复制
@@ -74,7 +75,6 @@ Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](
 ## 后续扩展方向
 
 ### 高优先级
-- arm64 架构支持
 - 支持 `?String` 和 `?Bytes` 可选类型
 - 改进错误诊断
 

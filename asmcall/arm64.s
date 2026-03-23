@@ -1,0 +1,59 @@
+//go:build arm64
+
+#include "textflag.h"
+
+TEXT ·CallFuncP0(SB), NOSPLIT|NOFRAME, $0-8
+	MOVD	fn+0(FP), R8
+	BL	(R8)
+	RET
+
+TEXT ·CallFuncP0R1(SB), NOSPLIT|NOFRAME, $0-16
+	MOVD	fn+0(FP), R8
+	BL	(R8)
+	MOVD	R0, ret+8(FP)
+	RET
+
+TEXT ·CallFuncP1(SB), NOSPLIT|NOFRAME, $0-16
+	MOVD	fn+0(FP), R8
+	MOVD	arg0+8(FP), R0
+	BL	(R8)
+	RET
+
+TEXT ·CallFuncP1R1(SB), NOSPLIT|NOFRAME, $0-24
+	MOVD	fn+0(FP), R8
+	MOVD	arg0+8(FP), R0
+	BL	(R8)
+	MOVD	R0, ret+16(FP)
+	RET
+
+TEXT ·CallFuncP2(SB), NOSPLIT|NOFRAME, $0-24
+	MOVD	fn+0(FP), R8
+	MOVD	arg0+8(FP), R0
+	MOVD	arg1+16(FP), R1
+	BL	(R8)
+	RET
+
+TEXT ·CallFuncP2R1(SB), NOSPLIT|NOFRAME, $0-32
+	MOVD	fn+0(FP), R8
+	MOVD	arg0+8(FP), R0
+	MOVD	arg1+16(FP), R1
+	BL	(R8)
+	MOVD	R0, ret+24(FP)
+	RET
+
+TEXT ·CallFuncP3(SB), NOSPLIT|NOFRAME, $0-32
+	MOVD	fn+0(FP), R8
+	MOVD	arg0+8(FP), R0
+	MOVD	arg1+16(FP), R1
+	MOVD	arg2+24(FP), R2
+	BL	(R8)
+	RET
+
+TEXT ·CallFuncP3R1(SB), NOSPLIT|NOFRAME, $0-40
+	MOVD	fn+0(FP), R8
+	MOVD	arg0+8(FP), R0
+	MOVD	arg1+16(FP), R1
+	MOVD	arg2+24(FP), R2
+	BL	(R8)
+	MOVD	R0, ret+32(FP)
+	RET

@@ -7,6 +7,8 @@ import (
 	"unsafe"
 )
 
+var _ = CallFuncG0P2StoreR1
+
 //go:noescape
 //go:nosplit
 func CallFuncG0P0(fn unsafe.Pointer)

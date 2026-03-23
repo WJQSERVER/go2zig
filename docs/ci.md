@@ -13,6 +13,7 @@ Windows job：
 - 生成 `examples/basic`
 - 运行 `go test ./...`
 - 运行 `go test -bench . ./asmcall`
+- 运行 PowerShell 交叉构建：`$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./...`
 
 Linux job：
 
@@ -20,6 +21,7 @@ Linux job：
 - 生成 `examples/basic`
 - 运行 `go test ./...`
 - 运行 `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...`
+- 运行 `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...`
 
 ## 为什么 Linux runtime 实跑测试默认关闭
 

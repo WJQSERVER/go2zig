@@ -12,12 +12,14 @@ Windows job:
 - `examples/basic` を生成する
 - `go test ./...` を実行する
 - `go test -bench . ./asmcall` を実行する
+- PowerShell でクロスビルドを実行する: `$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./...`
 
 Linux job:
 - Go と Zig をインストールする
 - `examples/basic` を生成する
 - `go test ./...` を実行する
 - `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...` を実行する
+- `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...` を実行する
 
 ## なぜ Linux runtime の実行テストはデフォルトで無効なのか
 

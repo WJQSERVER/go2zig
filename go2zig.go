@@ -2,6 +2,7 @@ package go2zig
 
 import (
 	"fmt"
+	"go/build/constraint"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,9 @@ func Generate(cfg GenerateConfig) error {
 	}
 	if cfg.Output == "" {
 		return fmt.Errorf("output path is required")
+	}
+	if err := validateGeneratedBuildTag(cfg.Output); err != nil {
+		return err
 	}
 	api, err := parser.ParseFile(cfg.API)
 	if err != nil {
@@ -65,6 +69,47 @@ func Generate(cfg GenerateConfig) error {
 		}
 	}
 	return nil
+}
+
+func validateGeneratedBuildTag(outputPath string) error {
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read existing generated go file: %w", err)
+	}
+	tag, err := parseFirstBuildTag(string(content))
+	if err != nil || tag == "" {
+		return nil
+	}
+	expr, err := constraint.Parse(tag)
+	if err != nil {
+		return nil
+	}
+	if !expr.Eval(func(tag string) bool {
+		return tag == runtime.GOOS || tag == runtime.GOARCH
+	}) {
+		return fmt.Errorf("existing generated file %s is excluded on %s/%s; remove or regenerate it under a supported target", outputPath, runtime.GOOS, runtime.GOARCH)
+	}
+	return nil
+}
+
+func parseFirstBuildTag(content string) (string, error) {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "//go:build ") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "//go:build ")), nil
+		}
+		if strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		break
+	}
+	return "", nil
 }
 
 type Builder struct {

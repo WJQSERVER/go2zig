@@ -16,10 +16,11 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 
 ### Supported Platforms
 - ✅ **Windows/amd64** - CI テストを含む完全サポート
+- ✅ **Windows/arm64** - no-cgo asm ランタイムでサポート
 - ✅ **Linux/amd64** - CI テストを含む完全サポート
+- ✅ **Linux/arm64** - no-cgo asm ランタイムでサポート
 
 ### Unsupported Platforms
-- ❌ **arm64** - 今後の実装を予定
 - ❌ **macOS** - 現在は未サポート
 - ❌ **Other architectures** - 現在は未サポート
 
@@ -27,7 +28,7 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **Platform**: Windows または Linux（amd64 のみ）
+- **Platform**: Windows または Linux（`amd64` と `arm64` をサポート）
 
 ## Supported Types
 
@@ -217,7 +218,7 @@ err := go2zig.NewBuilder().
 
 ## Limitations
 
-1. **Platform**: 対応するのは amd64 アーキテクチャのみ（Windows/Linux）
+1. **Platform**: 対応するのは Windows/Linux 上の `amd64` と `arm64` のみ
 2. **Types**: Go の maps、channels、interfaces は未サポート
 3. **Memory**: 固定のメモリ管理方式（Zig が確保し、Go が解放）
 4. **Performance**: 各呼び出しでデータコピーが必要
@@ -226,7 +227,6 @@ err := go2zig.NewBuilder().
 ## Future Roadmap
 
 ### Short-term
-- arm64 アーキテクチャ対応
 - `?String` と `?Bytes` の Optional 対応
 - より良いエラー診断
 
