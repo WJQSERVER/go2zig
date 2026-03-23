@@ -31,7 +31,7 @@ jobs:
             goos: linux
             goarch: amd64
             run_tests: true
-            run_bench: false
+            run_bench: true
             build_cmd: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./..."
           - os: ubuntu-latest
             goos: linux
@@ -42,7 +42,7 @@ jobs:
           - os: macos-latest
             goos: darwin
             goarch: arm64
-            run_tests: false
+            run_tests: true
             run_bench: false
             build_cmd: "GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./..."
     name: ${{ matrix.goos }}-${{ matrix.goarch }}

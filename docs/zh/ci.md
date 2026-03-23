@@ -20,6 +20,7 @@ Linux job：
 - 安装 Go 与 Zig
 - 生成 `examples/basic`
 - 运行 `go test ./...`
+- 运行 `go test -bench . ./asmcall`
 - 运行 `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...`
 - 运行 `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...`
 
@@ -28,7 +29,6 @@ Darwin job：
 - 安装 Go 与 Zig
 - 生成 `examples/basic`
 - 运行 `go test ./...`
-- 运行 `GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ./...`
 - 运行 `GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./...`
 
 ## 为什么 Linux runtime 实跑测试默认关闭
