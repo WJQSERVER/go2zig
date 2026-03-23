@@ -1,5 +1,7 @@
 # go2zig
 
+Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
+
 A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [rust2go](https://github.com/ihciah/rust2go).
 
 ## Key Features
@@ -205,12 +207,13 @@ See `examples/basic/` for a complete working example demonstrating:
 
 ## Documentation
 
-- [Architecture Overview](docs/architecture.md)
-- [Usage Guide](docs/usage.md)
-- [Generator Details](docs/generator.md)
-- [Runtime Design](docs/runtime.md)
-- [Testing & Benchmarks](docs/testing.md)
-- [CI Configuration](docs/ci.md)
+- [Docs Home](docs/en/README.md)
+- [Architecture Overview](docs/en/architecture.md)
+- [Usage Guide](docs/en/usage.md)
+- [Generator Guide](docs/en/generator.md)
+- [Runtime Design](docs/en/runtime.md)
+- [Testing & Benchmarks](docs/en/testing.md)
+- [CI Guide](docs/en/ci.md)
 
 ## Limitations
 

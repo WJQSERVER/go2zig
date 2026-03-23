@@ -1,6 +1,6 @@
 # go2zig 文档
 
-Languages: [English](en/README.md) | [简体中文](zh/README.md) | [日本語](ja/README.md)
+Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](../ja/README.md)
 
 `go2zig` 当前聚焦在无 `cgo` 的 `Go -> Zig` 调用链，核心目标是：
 
@@ -36,12 +36,12 @@ Languages: [English](en/README.md) | [简体中文](zh/README.md) | [日本語](
 
 ## 建议阅读顺序
 
-1. `docs/zh/architecture.md` - 了解整体架构
-2. `docs/zh/usage.md` - 学习使用方法
-3. `docs/zh/generator.md` - 了解生成器细节
-4. `docs/zh/runtime.md` - 了解运行时设计
-5. `docs/zh/testing.md` - 了解测试方法
-6. `docs/zh/ci.md` - 了解 CI 配置
+1. `docs/architecture.md` - 了解整体架构
+2. `docs/usage.md` - 学习使用方法
+3. `docs/generator.md` - 了解生成器细节
+4. `docs/runtime.md` - 了解运行时设计
+5. `docs/testing.md` - 了解测试方法
+6. `docs/ci.md` - 了解 CI 配置
 
 ## 快速开始
 
@@ -91,31 +91,28 @@ Languages: [English](en/README.md) | [简体中文](zh/README.md) | [日本語](
 ## 相关文档
 
 ### 中文文档
-- [英文 README](../README.md)
-- [中文 README](../README_zh.md)
-- [日文 README](../README_ja.md)
-- [文档首页](zh/README.md)
-- [架构概览](zh/architecture.md)
-- [使用指南](zh/usage.md)
-- [生成器详情](zh/generator.md)
-- [运行时设计](zh/runtime.md)
-- [测试与基准](zh/testing.md)
-- [CI 配置](zh/ci.md)
+- [英文 README](../../README.md)
+- [中文 README](../../README_zh.md)
+- [日文 README](../../README_ja.md)
+- [架构概览](architecture.md)
+- [使用指南](usage.md)
+- [生成器详情](generator.md)
+- [运行时设计](runtime.md)
+- [测试与基准](testing.md)
+- [CI 配置](ci.md)
 
 ### English Documentation
-- [Docs Home](en/README.md)
-- [Architecture Overview](en/architecture.md)
-- [Usage Guide](en/usage.md)
-- [Generator Guide](en/generator.md)
-- [Runtime Design](en/runtime.md)
-- [Testing & Benchmarks](en/testing.md)
-- [CI Guide](en/ci.md)
+- [Architecture Overview](../en/architecture.md)
+- [Usage Guide](../en/usage.md)
+- [Generator Guide](../en/generator.md)
+- [Runtime Design](../en/runtime.md)
+- [Testing & Benchmarks](../en/testing.md)
+- [CI Guide](../en/ci.md)
 
 ### 日本語ドキュメント
-- [ドキュメントトップ](ja/README.md)
-- [アーキテクチャ概要](ja/architecture.md)
-- [使用ガイド](ja/usage.md)
-- [ジェネレータ説明](ja/generator.md)
-- [ランタイム設計](ja/runtime.md)
-- [テストとベンチマーク](ja/testing.md)
-- [CI 説明](ja/ci.md)
+- [アーキテクチャ概要](../ja/architecture.md)
+- [使用ガイド](../ja/usage.md)
+- [ジェネレータ説明](../ja/generator.md)
+- [ランタイム設計](../ja/runtime.md)
+- [テストとベンチマーク](../ja/testing.md)
+- [CI 説明](../ja/ci.md)
