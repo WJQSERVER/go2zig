@@ -85,6 +85,9 @@ func validateGeneratedBuildTag(outputPath string) error {
 	}
 	expr, err := constraint.Parse(tag)
 	if err != nil {
+		expr, err = constraint.Parse("//go:build " + tag)
+	}
+	if err != nil {
 		return nil
 	}
 	if !expr.Eval(func(tag string) bool {

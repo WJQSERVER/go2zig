@@ -5,11 +5,46 @@ on:
     paths:
       - "**/*.go"
       - "**/*.zig"
+      - "**/*.md"
+      - ".github/workflows/*.yml"
   workflow_dispatch:
 
 jobs:
-  test-windows:
-    runs-on: windows-latest
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            run_tests: true
+            run_bench: true
+            shell: powershell
+            build_cmd: "$env:GOOS='windows'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'; go build ./..."
+          - os: windows-latest
+            goos: windows
+            goarch: arm64
+            run_tests: false
+            run_bench: false
+            shell: powershell
+            build_cmd: "$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./..."
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            run_tests: true
+            run_bench: false
+            shell: bash
+            build_cmd: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./..."
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            run_tests: false
+            run_bench: false
+            shell: bash
+            build_cmd: "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./..."
+    name: ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -22,29 +57,11 @@ jobs:
       - name: Prepare basic example
         run: go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
       - name: Run tests
+        if: ${{ matrix.run_tests }}
         run: go test ./...
       - name: Run asm benchmarks
+        if: ${{ matrix.run_bench }}
         run: go test -bench . ./asmcall
-      - name: Cross-check windows arm64 build
-        shell: powershell
-        run: $env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./...
-
-  test-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-      - name: Prepare basic example
-        run: go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
-      - name: Run tests
-        run: go test ./...
-      - name: Cross-check linux amd64 build
-        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...
-      - name: Cross-check linux arm64 build
-        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...
+      - name: Cross-check build
+        shell: ${{ matrix.shell }}
+        run: ${{ matrix.build_cmd }}
