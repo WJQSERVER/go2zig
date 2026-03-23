@@ -93,7 +93,7 @@ func validateGeneratedBuildTag(outputPath string) error {
 	if !expr.Eval(func(tag string) bool {
 		return tag == runtime.GOOS || tag == runtime.GOARCH
 	}) {
-		return fmt.Errorf("existing generated file %s is excluded on %s/%s; remove or regenerate it under a supported target", outputPath, runtime.GOOS, runtime.GOARCH)
+		return fmt.Errorf("existing generated file %s is excluded on %s/%s; regenerate it with go2zig on a matching target so it gets the correct build tags, or remove the stale file", outputPath, runtime.GOOS, runtime.GOARCH)
 	}
 	return nil
 }
