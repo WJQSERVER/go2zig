@@ -194,6 +194,8 @@ Return value side uses:
 - `windows/arm64`
 - `linux/amd64`
 - `linux/arm64`
+- `darwin/amd64`
+- `darwin/arm64`
 
 Where:
 - Windows path has entered main CI for live testing
@@ -208,7 +210,7 @@ Where:
 
 ### Disadvantages
 - Data copying required for each call
-- Only supports `amd64` / `arm64`
+- Only supports Windows / Linux / Darwin on `amd64` / `arm64`
 - Limited type support
 
 ## Extension Points

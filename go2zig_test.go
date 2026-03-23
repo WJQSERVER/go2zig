@@ -291,7 +291,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 	}
 	text := string(content)
 	checks := []string{
-		"//go:build (amd64 || arm64) && (windows || linux)",
+		"//go:build (amd64 || arm64) && (windows || linux || darwin)",
 		"package sample",
 		"type Go2ZigClient struct",
 		"type UserKind uint8",

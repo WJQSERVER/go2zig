@@ -19,16 +19,17 @@ A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [r
 - ✅ **Windows/arm64** - Supported by the no-cgo asm runtime
 - ✅ **Linux/amd64** - Full support with CI testing
 - ✅ **Linux/arm64** - Supported by the no-cgo asm runtime
+- ✅ **Darwin/amd64** - Dynamic loading and generated wrappers supported
+- ✅ **Darwin/arm64** - Dynamic loading and generated wrappers supported
 
 ### Unsupported Platforms
-- ❌ **macOS** - Not currently supported
 - ❌ **Other architectures** - Not currently supported
 
 ## Requirements
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **Platform**: Windows or Linux (`amd64` and `arm64`)
+- **Platform**: Windows, Linux, or Darwin (`amd64` and `arm64`)
 
 ## Supported Types
 
@@ -218,7 +219,7 @@ See `examples/basic/` for a complete working example demonstrating:
 
 ## Limitations
 
-1. **Platform**: Only Windows/Linux on `amd64` and `arm64`
+1. **Platform**: Only Windows/Linux/Darwin on `amd64` and `arm64`
 2. **Types**: No support for Go maps, channels, interfaces
 3. **Memory**: Fixed allocation pattern (Zig allocates, Go frees)
 4. **Performance**: Data copying required for each call

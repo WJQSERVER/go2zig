@@ -21,6 +21,13 @@ Linux job:
 - `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...` を実行する
 - `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...` を実行する
 
+Darwin job:
+- Go と Zig をインストールする
+- `examples/basic` を生成する
+- `go test ./...` を実行する
+- `GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ./...` を実行する
+- `GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./...` を実行する
+
 ## なぜ Linux runtime の実行テストはデフォルトで無効なのか
 
 現在、Linux 上の no-`cgo` runtime は、性能を重視した低層実装の段階にあります。

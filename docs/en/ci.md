@@ -23,6 +23,14 @@ Linux job:
 - Run `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...`
 - Run `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...`
 
+Darwin job:
+
+- Install Go and Zig
+- Generate `examples/basic`
+- Run `go test ./...`
+- Run `GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ./...`
+- Run `GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./...`
+
 ## Why Linux Runtime Live Testing is Disabled by Default
 
 Current no-`cgo` runtime on Linux is still in a performance-oriented low-level implementation phase.
