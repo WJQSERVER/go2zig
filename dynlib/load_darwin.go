@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build darwin && arm64
 
 package dynlib
 
@@ -9,19 +9,17 @@ import (
 	_ "unsafe"
 )
 
-//go:cgo_import_dynamic libsystem_dlopen dlopen "/usr/lib/libSystem.B.dylib"
-//go:cgo_import_dynamic libsystem_dlsym dlsym "/usr/lib/libSystem.B.dylib"
-//go:cgo_import_dynamic libsystem_dlclose dlclose "/usr/lib/libSystem.B.dylib"
-//go:cgo_import_dynamic _ _ "/usr/lib/libSystem.B.dylib"
+//go:cgo_import_dynamic libsystem_dlopen dlopen ""
+//go:cgo_import_dynamic libsystem_dlsym dlsym ""
+//go:cgo_import_dynamic libsystem_dlclose dlclose ""
 
 var libsystem_dlopen uintptr
 var libsystem_dlsym uintptr
 var libsystem_dlclose uintptr
 
 const (
-	rtldLazy   = 0x1
-	rtldLocal  = 0x4
-	rtldNoLoad = 0x10
+	rtldLazy  = 0x1
+	rtldLocal = 0x4
 )
 
 type Library struct {
@@ -30,6 +28,9 @@ type Library struct {
 }
 
 func Load(path string) (*Library, error) {
+	if libsystem_dlopen == 0 {
+		return nil, fmt.Errorf("darwin dynamic loader symbols are unavailable")
+	}
 	pathBytes := append([]byte(path), 0)
 	handle := libSystemOpen(pathBytes, rtldLazy|rtldLocal)
 	if handle == 0 {

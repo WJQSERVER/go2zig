@@ -1,4 +1,4 @@
-//go:build (amd64 || arm64) && (windows || linux || darwin)
+//go:build ((windows || linux) && (amd64 || arm64)) || (darwin && arm64)
 
 package main
 

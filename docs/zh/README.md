@@ -15,10 +15,10 @@ Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](
 - `windows/arm64` - 无 cgo 汇编运行时已支持
 - `linux/amd64` - 完全支持，包含 CI 测试
 - `linux/arm64` - 无 cgo 汇编运行时已支持
-- `darwin/amd64` - 已支持动态加载与生成包装
 - `darwin/arm64` - 已支持动态加载与生成包装
 
 不支持：
+- `darwin/amd64` - 当前不支持
 - 其他架构 - 当前不支持
 
 ## 类型支持概览
@@ -68,7 +68,7 @@ Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](
 
 ## 当前限制
 
-1. **平台限制**：仅支持 Windows、Linux 和 Darwin 上的 `amd64` / `arm64`
+1. **平台限制**：仅支持 Windows/Linux 上的 `amd64` / `arm64`，以及 Darwin 上的 `arm64`
 2. **类型限制**：不支持 Go 的 map、channel、interface 等特有类型
 3. **内存管理**：固定的分配模式，无法自定义分配器
 4. **性能开销**：每次调用需要数据复制

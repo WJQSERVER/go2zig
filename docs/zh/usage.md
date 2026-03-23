@@ -11,10 +11,10 @@
 - **Windows/arm64** - 无 cgo 汇编运行时已支持
 - **Linux/amd64** - 完全支持
 - **Linux/arm64** - 无 cgo 汇编运行时已支持
-- **Darwin/amd64** - 已支持动态加载与生成包装
 - **Darwin/arm64** - 已支持动态加载与生成包装
 
 不支持的平台：
+- **Darwin/amd64** - 当前不支持
 - 其他操作系统
 
 ### 软件要求
@@ -301,7 +301,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 ### Q5: 为什么有些类型不支持？
 
 当前设计限制：
-- **平台限制**：仅支持 Windows/Linux/Darwin 上的 `amd64` 与 `arm64`
+- **平台限制**：仅支持 Windows/Linux 上的 `amd64` 与 `arm64`，以及 Darwin 上的 `arm64`
 - **类型限制**：为了保持 ABI 稳定性和性能，不支持动态类型
 - **内存管理**：固定分配模式，无法自定义
 
@@ -327,7 +327,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 
 1. **类型不支持**：检查是否使用了不支持的类型
 2. **语法错误**：确保使用了正确的 Zig 语法
-3. **平台不支持**：确保在 Windows/Linux/Darwin 的 `amd64` 或 `arm64` 上运行
+3. **平台不支持**：确保在 Windows/Linux 的 `amd64` 或 `arm64` 上运行，或在 Darwin 的 `arm64` 上运行
 
 ## 12. 最佳实践
 

@@ -19,17 +19,17 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 - ✅ **Windows/arm64** - no-cgo asm ランタイムでサポート
 - ✅ **Linux/amd64** - CI テストを含む完全サポート
 - ✅ **Linux/arm64** - no-cgo asm ランタイムでサポート
-- ✅ **Darwin/amd64** - 動的ロードと生成ラッパーに対応
 - ✅ **Darwin/arm64** - 動的ロードと生成ラッパーに対応
 
 ### Unsupported Platforms
+- ❌ **Darwin/amd64** - 現在は未サポート
 - ❌ **Other architectures** - 現在は未サポート
 
 ## Requirements
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **Platform**: Windows、Linux、Darwin（`amd64` と `arm64` をサポート）
+- **Platform**: Windows/Linux（`amd64` と `arm64`）および Darwin（`arm64` のみ）
 
 ## Supported Types
 
@@ -219,7 +219,7 @@ err := go2zig.NewBuilder().
 
 ## Limitations
 
-1. **Platform**: 対応するのは Windows/Linux/Darwin 上の `amd64` と `arm64` のみ
+1. **Platform**: 対応するのは Windows/Linux 上の `amd64` と `arm64`、および Darwin 上の `arm64` のみ
 2. **Types**: Go の maps、channels、interfaces は未サポート
 3. **Memory**: 固定のメモリ管理方式（Zig が確保し、Go が解放）
 4. **Performance**: 各呼び出しでデータコピーが必要

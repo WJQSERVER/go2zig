@@ -11,10 +11,10 @@
 - **Windows/arm64** - no-cgo asm ランタイムで対応
 - **Linux/amd64** - 完全対応
 - **Linux/arm64** - no-cgo asm ランタイムで対応
-- **Darwin/amd64** - 動的ロードと生成ラッパーに対応
 - **Darwin/arm64** - 動的ロードと生成ラッパーに対応
 
 サポートしていないプラットフォーム:
+- **Darwin/amd64** - 現在は未サポート
 - その他の OS
 
 ### ソフトウェア要件
@@ -301,7 +301,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 ### Q5: 一部の型がサポートされないのはなぜですか？
 
 現在の設計上の制約:
-- **プラットフォーム制約**: Windows/Linux/Darwin 上の `amd64` と `arm64` のみ対応
+- **プラットフォーム制約**: Windows/Linux 上の `amd64` と `arm64`、および Darwin 上の `arm64` のみ対応
 - **型制約**: ABI の安定性と性能維持のため、動的型はサポートしない
 - **メモリ管理**: 固定の割り当て方式であり、カスタマイズできない
 
@@ -327,7 +327,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 
 1. **型がサポートされていない**: 非対応の型を使っていないか確認する
 2. **構文エラー**: 正しい Zig 構文を使っているか確認する
-3. **プラットフォーム未対応**: Windows/Linux/Darwin の `amd64` または `arm64` 上で実行しているか確認する
+3. **プラットフォーム未対応**: Windows/Linux の `amd64` または `arm64`、または Darwin の `arm64` 上で実行しているか確認する
 
 ## 12. ベストプラクティス
 

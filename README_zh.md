@@ -19,17 +19,17 @@
 - ✅ **Windows/arm64** - 无 cgo 汇编运行时已支持
 - ✅ **Linux/amd64** - 完全支持，包含 CI 测试
 - ✅ **Linux/arm64** - 无 cgo 汇编运行时已支持
-- ✅ **Darwin/amd64** - 已支持动态加载与生成包装
 - ✅ **Darwin/arm64** - 已支持动态加载与生成包装
 
 ### 不支持的平台
+- ❌ **Darwin/amd64** - 当前不支持
 - ❌ **其他架构** - 当前不支持
 
 ## 环境要求
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **平台**：Windows、Linux 或 Darwin（支持 `amd64` 和 `arm64`）
+- **平台**：Windows/Linux（支持 `amd64` 和 `arm64`）以及 Darwin（仅 `arm64`）
 
 ## 支持的类型
 
@@ -218,7 +218,7 @@ err := go2zig.NewBuilder().
 
 ## 限制
 
-1. **平台**：仅支持 Windows/Linux/Darwin 上的 `amd64` 与 `arm64`
+1. **平台**：仅支持 Windows/Linux 上的 `amd64` 与 `arm64`，以及 Darwin 上的 `arm64`
 2. **类型**：不支持 Go 的 map、channel、interface
 3. **内存**：固定分配模式（Zig 分配，Go 释放）
 4. **性能**：每次调用需要数据复制
