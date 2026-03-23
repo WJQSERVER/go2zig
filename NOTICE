@@ -1,0 +1,15 @@
+Copyright (c) 2024-2026 WJQSERVER, satomitouka, satomitoka
+
+All rights reserved.
+
+This project (go2zig) is a joint work developed by WJQSERVER, satomitouka, and satomitoka.
+
+Acknowledgments
+---------------
+
+This project is inspired by and references the rust2go project (https://github.com/ihciah/rust2go).
+
+We would like to thank the rust2go team for their pioneering work in Rust-to-Go FFI,
+which provided valuable insights and design patterns for this Go-to-Zig implementation.
+
+The rust2go project is licensed under MIT and Apache-2.0 dual license.
