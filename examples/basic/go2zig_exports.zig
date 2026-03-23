@@ -12,7 +12,8 @@ pub const Go2ZigCallHealth = extern struct {
 };
 
 pub export fn go2zig_call_health(frame: *Go2ZigCallHealth) void {
-    frame.out = impl.health();
+    const result = impl.health();
+    frame.out = result;
 }
 
 pub const Go2ZigCallLogin = extern struct {
@@ -21,7 +22,8 @@ pub const Go2ZigCallLogin = extern struct {
 };
 
 pub export fn go2zig_call_login(frame: *Go2ZigCallLogin) void {
-    frame.out = impl.login(frame.req);
+    const result = impl.login(frame.req);
+    frame.out = result;
 }
 
 pub const Go2ZigCallLoginChecked = extern struct {
@@ -46,7 +48,8 @@ pub const Go2ZigCallRenameUser = extern struct {
 };
 
 pub export fn go2zig_call_rename_user(frame: *Go2ZigCallRenameUser) void {
-    frame.out = impl.rename_user(frame.user, frame.next_name);
+    const result = impl.rename_user(frame.user, frame.next_name);
+    frame.out = result;
 }
 
 pub const Go2ZigCallPromoteUser = extern struct {
@@ -57,15 +60,119 @@ pub const Go2ZigCallPromoteUser = extern struct {
 };
 
 pub export fn go2zig_call_promote_user(frame: *Go2ZigCallPromoteUser) void {
-    frame.out = impl.promote_user(frame.user, frame.next_kind, frame.next_scores);
+    const result = impl.promote_user(frame.user, frame.next_kind, frame.next_scores);
+    frame.out = result;
 }
 
 pub const Go2ZigCallDigestName = extern struct {
     name: api.String,
-    out: [4]u8,
+    out: api.Digest,
 };
 
 pub export fn go2zig_call_digest_name(frame: *Go2ZigCallDigestName) void {
-    frame.out = impl.digest_name(frame.name);
+    const result = impl.digest_name(frame.name);
+    frame.out = result;
+}
+
+pub const Go2ZigCallScaleScores = extern struct {
+    scores: api.ScoreList,
+    factor: u16,
+    out: api.ScoreList,
+};
+
+pub export fn go2zig_call_scale_scores(frame: *Go2ZigCallScaleScores) void {
+    const result = impl.scale_scores(frame.scores, frame.factor);
+    frame.out = result;
+}
+
+pub const Go2ZigCallMirrorKindHistory = extern struct {
+    history: api.UserKindList,
+    out: api.UserKindList,
+};
+
+pub export fn go2zig_call_mirror_kind_history(frame: *Go2ZigCallMirrorKindHistory) void {
+    const result = impl.mirror_kind_history(frame.history);
+    frame.out = result;
+}
+
+pub const Go2ZigCallDuplicateDigest = extern struct {
+    seed: api.String,
+    out: api.DigestList,
+};
+
+pub export fn go2zig_call_duplicate_digest(frame: *Go2ZigCallDuplicateDigest) void {
+    const result = impl.duplicate_digest(frame.seed);
+    frame.out = result;
+}
+
+pub const Go2ZigCallMirrorMetrics = extern struct {
+    metrics: api.MetricList,
+    out: api.MetricList,
+};
+
+pub export fn go2zig_call_mirror_metrics(frame: *Go2ZigCallMirrorMetrics) void {
+    const result = impl.mirror_metrics(frame.metrics);
+    frame.out = result;
+}
+
+pub const Go2ZigCallMirrorUsers = extern struct {
+    users: api.UserList,
+    out: api.UserList,
+};
+
+pub export fn go2zig_call_mirror_users(frame: *Go2ZigCallMirrorUsers) void {
+    const result = impl.mirror_users(frame.users);
+    frame.out = result;
+}
+
+pub const Go2ZigCallMirrorBuckets = extern struct {
+    buckets: api.BucketList,
+    out: api.BucketList,
+};
+
+pub export fn go2zig_call_mirror_buckets(frame: *Go2ZigCallMirrorBuckets) void {
+    const result = impl.mirror_buckets(frame.buckets);
+    frame.out = result;
+}
+
+pub const Go2ZigCallMaybeKind = extern struct {
+    flag: bool,
+    out: rt.Optional_optional_5_UserKind,
+};
+
+pub export fn go2zig_call_maybe_kind(frame: *Go2ZigCallMaybeKind) void {
+    const result = impl.maybe_kind(frame.flag);
+    frame.out = rt.fromOptional_optional_5_UserKind(result);
+}
+
+pub const Go2ZigCallMaybeDigest = extern struct {
+    flag: bool,
+    out: rt.Optional_optional_arrayalias_Digest,
+};
+
+pub export fn go2zig_call_maybe_digest(frame: *Go2ZigCallMaybeDigest) void {
+    const result = impl.maybe_digest(frame.flag);
+    frame.out = rt.fromOptional_optional_arrayalias_Digest(result);
+}
+
+pub const Go2ZigCallChooseLimit = extern struct {
+    flag: bool,
+    value: rt.Optional_optional_1_u32,
+    out: rt.Optional_optional_1_u32,
+};
+
+pub export fn go2zig_call_choose_limit(frame: *Go2ZigCallChooseLimit) void {
+    const result = impl.choose_limit(frame.flag, rt.toOptional_optional_1_u32(frame.value));
+    frame.out = rt.fromOptional_optional_1_u32(result);
+}
+
+pub const Go2ZigCallMirrorScoreGroups = extern struct {
+    groups: api.ScoreGroupList,
+    out: api.ScoreGroupList,
+};
+
+pub export fn go2zig_call_mirror_score_groups(frame: *Go2ZigCallMirrorScoreGroups) void {
+    const result = impl.mirror_score_groups(frame.groups);
+    frame.out = result;
 }
 

@@ -12,7 +12,15 @@ func TestRender(t *testing.T) {
 
 	api, err := parser.Parse(`
 		pub const String = extern struct { ptr: [*]const u8, len: usize, };
+		pub const Digest = [4]u8;
 		pub const Bytes = extern struct { ptr: [*]const u8, len: usize, };
+		pub const ScoreList = extern struct { ptr: ?[*]const u16, len: usize, };
+		pub const UserKindList = extern struct { ptr: ?[*]const UserKind, len: usize, };
+		pub const DigestList = extern struct { ptr: ?[*]const Digest, len: usize, };
+		pub const MetricList = extern struct { ptr: ?[*]const Metric, len: usize, };
+		pub const UserList = extern struct { ptr: ?[*]const User, len: usize, };
+		pub const BucketList = extern struct { ptr: ?[*]const Bucket, len: usize, };
+		pub const ScoreGroupList = extern struct { ptr: ?[*]const ScoreList, len: usize, };
 		pub const UserKind = enum(u8) { guest, member, admin };
         pub const User = extern struct {
             id: u64,
@@ -21,6 +29,14 @@ func TestRender(t *testing.T) {
             email: String,
             scores: [3]u16,
         };
+		pub const Metric = extern struct {
+			kind: UserKind,
+			scores: [3]u16,
+		};
+		pub const Bucket = extern struct {
+			kind: UserKind,
+			scores: ScoreList,
+		};
         pub const LoginRequest = extern struct {
             user: User,
             password: String,
@@ -29,7 +45,7 @@ func TestRender(t *testing.T) {
 			ok: bool,
 			message: String,
 			token: Bytes,
-			digest: [4]u8,
+			digest: Digest,
 		};
 		pub const LoginError = error{ InvalidPassword };
 		pub extern fn health() bool;
@@ -37,7 +53,17 @@ func TestRender(t *testing.T) {
 		pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 		pub extern fn rename_user(user: User, next_name: String) User;
 		pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
-		pub extern fn digest_name(name: String) [4]u8;
+		pub extern fn digest_name(name: String) Digest;
+		pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
+		pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
+		pub extern fn duplicate_digest(seed: String) DigestList;
+		pub extern fn mirror_metrics(metrics: MetricList) MetricList;
+		pub extern fn mirror_users(users: UserList) UserList;
+		pub extern fn mirror_buckets(buckets: BucketList) BucketList;
+		pub extern fn maybe_kind(flag: bool) ?UserKind;
+		pub extern fn maybe_digest(flag: bool) ?Digest;
+		pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
+		pub extern fn mirror_score_groups(groups: ScoreGroupList) ScoreGroupList;
 	`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -55,6 +81,13 @@ func TestRender(t *testing.T) {
 		"package basic",
 		"type Go2ZigClient struct",
 		"type UserKind uint8",
+		"type Digest [4]uint8",
+		"type ScoreList []uint16",
+		"type UserKindList []UserKind",
+		"type DigestList []Digest",
+		"type MetricList []Metric",
+		"type UserList []User",
+		"type BucketList []Bucket",
 		"UserKindAdmin",
 		"func NewGo2ZigClient(path string) *Go2ZigClient",
 		"func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse",
@@ -62,10 +95,28 @@ func TestRender(t *testing.T) {
 		"func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error)",
 		"func (c *Go2ZigClient) RenameUser(user User, nextName string) User",
 		"func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User",
-		"func (c *Go2ZigClient) DigestName(name string) [4]uint8",
+		"func (c *Go2ZigClient) DigestName(name string) Digest",
+		"func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList",
+		"func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList",
+		"func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList",
+		"func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList",
+		"func (c *Go2ZigClient) MirrorUsers(users UserList) UserList",
+		"func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList",
+		"func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind",
+		"func (c *Go2ZigClient) MaybeDigest(flag bool) *Digest",
+		"func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32",
+		"func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList",
+		"type _go2zigOptional_optional_",
+		"func _go2zigRefOptional_",
+		"func _go2zigRefScoreGroupList(value ScoreGroupList) _go2zigRefScoreGroupListResult",
+		"func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult",
+		"func _go2zigRefUserList(value UserList) _go2zigRefUserListResult",
+		"func _go2zigRefBucketList(value BucketList) _go2zigRefBucketListResult",
+		"func _go2zigRefScoreList(value ScoreList) _go2zigRefScoreListResult",
 		"func _go2zigRefArray_",
 		"go2zig_call_login",
 		"type Go2ZigError struct",
+		"if ptr == nil || len == 0 {",
 	}
 	for _, check := range checks {
 		if !strings.Contains(content, check) {
@@ -73,9 +124,30 @@ func TestRender(t *testing.T) {
 		}
 	}
 
-	runtimeText := string(RenderZigRuntime(Config{APIModule: "api.zig"}))
+	runtimeText := string(RenderZigRuntime(api, Config{APIModule: "api.zig"}))
 	if !strings.Contains(runtimeText, "std.heap.smp_allocator") {
 		t.Fatalf("RenderZigRuntime() should use smp_allocator\n%s", runtimeText)
+	}
+	for _, check := range []string{
+		"pub fn ownString(value: []const u8) api.String {\n    if (value.len == 0) return .{ .ptr = undefined, .len = 0 };",
+		"pub fn ownBytes(value: []const u8) api.Bytes {\n    if (value.len == 0) return .{ .ptr = undefined, .len = 0 };",
+		"pub fn okError() ErrorInfo {\n    return .{ .code = 0, .text = .{ .ptr = undefined, .len = 0 } };",
+	} {
+		if !strings.Contains(runtimeText, check) {
+			t.Fatalf("RenderZigRuntime() missing %q\n%s", check, runtimeText)
+		}
+	}
+	if strings.Contains(runtimeText, "pub fn ownString(value: []const u8) api.String {\n    if (value.len == 0) return .{ .ptr = null, .len = 0 };") {
+		t.Fatalf("RenderZigRuntime() should not emit null in ownString\n%s", runtimeText)
+	}
+	if strings.Contains(runtimeText, "pub fn ownBytes(value: []const u8) api.Bytes {\n    if (value.len == 0) return .{ .ptr = null, .len = 0 };") {
+		t.Fatalf("RenderZigRuntime() should not emit null in ownBytes\n%s", runtimeText)
+	}
+	if strings.Contains(runtimeText, "pub fn okError() ErrorInfo {\n    return .{ .code = 0, .text = .{ .ptr = null, .len = 0 } };") {
+		t.Fatalf("RenderZigRuntime() should not emit null in okError\n%s", runtimeText)
+	}
+	if !strings.Contains(runtimeText, "pub const Optional_optional_") {
+		t.Fatalf("RenderZigRuntime() should emit optional wrapper helpers\n%s", runtimeText)
 	}
 	bridgeText := string(RenderZigBridge(api, Config{APIModule: "api.zig", ImplModule: "lib.zig"}))
 	if !strings.Contains(bridgeText, "pub export fn go2zig_call_login") {
@@ -86,6 +158,9 @@ func TestRender(t *testing.T) {
 	}
 	if !strings.Contains(bridgeText, "pub export fn go2zig_free_buf") {
 		t.Fatalf("RenderZigBridge() missing free bridge\n%s", bridgeText)
+	}
+	if !strings.Contains(bridgeText, "rt.toOptional_") {
+		t.Fatalf("RenderZigBridge() missing optional input conversion\n%s", bridgeText)
 	}
 }
 

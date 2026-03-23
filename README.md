@@ -1,33 +1,81 @@
 # go2zig
 
-`go2zig` 仿照 `outrepo/rust2go` 的思路，做一个面向 Go -> Zig 的轻量代码生成器：
+A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [rust2go](https://github.com/ihciah/rust2go).
 
-- 用 Zig 原生声明作为 API 描述，不额外引入 IDL
-- 生成 Go 包装层，把 `string`、`[]byte`、嵌套 struct 自动转成 FFI 结构
-- 提供 `Builder`，可在生成 Go 包装的同时直接编译 Zig 动态库
-- Go 侧调用优先做得更顺手：默认生成 `Client` 方法和同名顶层函数，业务代码不用手写 `syscall`/`unsafe`
-- 当前主线转向无 `cgo`：Go 通过 `asmcall + dynlib + 生成桥接层` 直接调用 Zig 导出函数
+## Key Features
 
-当前版本先聚焦单向调用：Go 调 Zig。
+- **Zig-native API declarations** - Use standard Zig syntax as API description, no separate IDL needed
+- **Automatic type bridging** - Seamlessly convert `string`, `[]byte`, nested structs, enums, slices, and arrays
+- **No cgo required** - Direct assembly-based calling with up to 8x performance improvement over cgo
+- **Builder pattern** - Generate Go wrappers and compile Zig dynamic libraries in one step
+- **Dual API style** - Both `Client` methods and top-level functions for flexible usage
 
-更多细节见 `docs/README.md`，如果你想按步骤落地，可以直接看 `docs/usage.md`。
+## Platform Support
 
-## 当前进展
+### Supported Platforms
+- ✅ **Windows/amd64** - Full support with CI testing
+- ✅ **Linux/amd64** - Full support with CI testing
 
-- 已完成 `windows/amd64` 与 `linux/amd64` 下无 `cgo` 的底层调用运行时：`asmcall` + 动态库符号加载
-- 正在把代码生成器切换到新的无 `cgo` 桥接方案
-- 目标是优先覆盖高频短调用场景，并结合 Zig 分配器特性降低返回值拷贝成本
+### Unsupported Platforms
+- ❌ **arm64** - Planned for future implementation
+- ❌ **macOS** - Not currently supported
+- ❌ **Other architectures** - Not currently supported
 
-## 基线环境
+## Requirements
 
-- Go: `1.26`
-- Zig: `0.15.2`
+- **Go** 1.26+
+- **Zig** 0.15.2
+- **Platform**: Windows or Linux (amd64 only)
 
-## 支持的 API 语法
+## Supported Types
 
-在 Zig 文件里使用一组受限声明：
+### Primitive Types
+- `bool`
+- `u8`, `u16`, `u32`, `u64`, `usize`
+- `i8`, `i16`, `i32`, `i64`, `isize`
+- `f32`, `f64`
+
+### Composite Types
+- **Structs**: `extern struct` with nested fields
+- **Enums**: `enum(integer_type)` with explicit values
+- **Arrays**: Fixed-length `[N]Type` and named aliases like `pub const Digest = [4]u8`
+- **Slices**: Named aliases like `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`
+- **Optionals**: `?POD` (e.g., `?u32`, `?UserKind`, `?Digest`)
+
+### Special Types
+- **String**: Maps to Go `string` (Zig allocates, Go frees)
+- **Bytes**: Maps to Go `[]byte` (Zig allocates, Go frees)
+
+### Error Handling
+- **Error unions**: `error{...}!ReturnType` mapped to Go `(T, error)` or `error`
+
+## Unsupported Types
+
+### Go-specific Types
+- `map[K]V`
+- `chan T`
+- `interface{}`
+- Function types (`func(...)`)
+- Pointers (except in String/Bytes)
+- `unsafe.Pointer`
+
+### Zig-specific Types
+- `union`
+- `comptime`
+- `@import`
+- Complex error sets
+
+### Limited Support
+- Optional types only support POD (Plain Old Data)
+- Slice elements cannot be `String` or `Bytes`
+- Nested optionals (`??T`) not supported
+
+## Quick Start
+
+### 1. Define API in Zig
 
 ```zig
+// api.zig
 pub const String = extern struct {
     ptr: [*]const u8,
     len: usize,
@@ -38,82 +86,164 @@ pub const Bytes = extern struct {
     len: usize,
 };
 
+pub const UserKind = enum(u8) {
+    guest,
+    member,
+    admin,
+};
+
 pub const User = extern struct {
     id: u64,
+    kind: UserKind,
     name: String,
+    email: String,
 };
 
 pub extern fn health() bool;
-pub extern fn rename_user(user: User, next_name: String) User;
+pub extern fn login(user: User, password: String) String;
 ```
 
-目前支持：
-
-- 基础类型：`bool` `u8/u16/u32/u64/usize` `i8/i16/i32/i64/isize` `f32` `f64`
-- `enum(<int>)` 风格枚举
-- 特殊类型：`String` `Bytes`
-- `extern struct` 组合和嵌套
-- 固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]MyEnum`
-- `pub extern fn` / `pub export fn` 风格函数签名解析
-- `[*]const u8` 与 `?[*]const u8` 这类 Zig 指针形式的 `String`/`Bytes` 别名
-
-## 生成方式
-
-只生成 Go 包装和 Zig 桥接文件：
+### 2. Generate Go Wrapper and Build
 
 ```bash
-go run ./cmd/go2zig -api ./examples/basic/api.zig -out ./examples/basic/gen.go -pkg main -lib basic -no-build
+# Generate only
+go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib mylib -no-build
+
+# Generate and build dynamic library
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib
 ```
 
-同时编译 Zig 动态库：
-
-```bash
-go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
-```
-
-会在输出目录下生成：
-
-- `gen.go`
-- `go2zig_runtime.zig`
-- `go2zig_exports.zig`
-- `basic.dll` / `libbasic.so`（按目标平台生成）
-
-如果你显式传入 `-header`，会额外尝试让 Zig 输出 C 头文件。
-
-## Go 侧调用便利性改进
-
-相较于 `rust2go` 的 `G2RCallImpl{}` 风格，这里默认直接生成两层 API：
-
-- `Client` 方法，便于做依赖注入或未来扩展实例级配置
-- 顶层函数，如 `Login(...)`、`RenameUser(...)`，默认转发到 `Default`，业务调用更短
-
-示例：
+### 3. Use in Go
 
 ```go
-resp := Login(LoginRequest{
-    User: User{ID: 7, Name: "alice", Email: "alice@example.com"},
-    Password: "secret-123",
-})
+package main
 
-renamed := RenameUser(respUser, "ally")
+import "fmt"
+
+func main() {
+    // Load the dynamic library
+    if err := Default.Load(); err != nil {
+        panic(err)
+    }
+
+    // Call functions directly
+    if !Health() {
+        panic("Health check failed")
+    }
+
+    // Or use the client
+    client := NewGo2ZigClient("")
+    if err := client.Load(); err != nil {
+        panic(err)
+    }
+
+    greeting := client.Login(User{
+        ID:     1,
+        Kind:   UserKindMember,
+        Name:   "alice",
+        Email:  "alice@example.com",
+    }, "password123")
+    fmt.Println(greeting)
+}
 ```
 
-不需要显式创建 `Impl{}`，也不需要自己维护导出函数地址、frame struct 和内存释放协议。
+## Performance
 
-## 运行示例
+Based on benchmarks on Windows/amd64:
 
-```bash
-go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
-go run ./examples/basic
+| Method | Performance | Relative |
+|--------|-------------|----------|
+| **asmcall (go2zig)** | **3.35 ns/op** | **1x** |
+| cgo | 28.56 ns/op | ~8.5x slower |
+
+The no-cgo approach provides approximately **8x performance improvement** for short, synchronous FFI calls.
+
+## Memory Management
+
+- **Allocation**: Zig side allocates memory for strings, bytes, and slices
+- **Deallocation**: Go side frees memory through `go2zig_free_buf`
+- **Pattern**: Copy-in for inputs, copy-out for outputs
+- **Overhead**: Data copying required for each call
+
+## Generated Files
+
+When you run the generator, it produces:
+
+- `gen.go` - Go wrapper with types and functions
+- `go2zig_runtime.zig` - Zig runtime helpers
+- `go2zig_exports.zig` - Zig export bridge functions
+- `mylib.dll` / `libmylib.so` - Dynamic library
+
+## Builder API
+
+For programmatic usage in Go:
+
+```go
+import "go2zig"
+
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("mylib").
+    Build()
 ```
 
-说明：当前无 `cgo` 高性能运行时优先支持 `windows/amd64` 与 `linux/amd64`。
+## Examples
 
-## 后续可扩展方向
+See `examples/basic/` for a complete working example demonstrating:
 
-- `error union` / Zig error 到 Go `error` 的映射
-- 切片和数组支持
-- `go:generate` 辅助指令
-- 更完整的 build helper，与 `go build`/`go generate` 深度集成
-- 扩展到 `arm64`
-- 进一步压缩 frame 布局和返回值分配开销
+- Primitive types
+- Structs and nested structs
+- Enums with explicit values
+- Arrays and array aliases
+- Slices and slice aliases
+- Optionals
+- Error unions
+- String and Bytes handling
+
+## Documentation
+
+- [Architecture Overview](docs/architecture.md)
+- [Usage Guide](docs/usage.md)
+- [Generator Details](docs/generator.md)
+- [Runtime Design](docs/runtime.md)
+- [Testing & Benchmarks](docs/testing.md)
+- [CI Configuration](docs/ci.md)
+
+## Limitations
+
+1. **Platform**: Only amd64 architecture (Windows/Linux)
+2. **Types**: No support for Go maps, channels, interfaces
+3. **Memory**: Fixed allocation pattern (Zig allocates, Go frees)
+4. **Performance**: Data copying required for each call
+5. **Error handling**: Limited to simple error sets
+
+## Future Roadmap
+
+### Short-term
+- arm64 architecture support
+- Support for `?String` and `?Bytes` optionals
+- Better error diagnostics
+
+### Medium-term
+- `union` type support
+- Custom allocator interface
+- Performance optimizations
+
+### Long-term
+- Generic type support
+- Toolchain integration
+- Cross-platform improvements
+
+## Contributing
+
+1. Run tests: `go test ./...`
+2. Run benchmarks: `go test -bench . ./asmcall`
+3. Test on both Windows and Linux
+4. Update documentation for new features
+
+## License
+
+This project is licensed under the [Mozilla Public License 2.0](LICENSE).

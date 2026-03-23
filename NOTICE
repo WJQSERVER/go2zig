@@ -1,0 +1,16 @@
+Copyright (c) 2026 WJQSERVER, satomitouka, satomitoka
+
+All rights reserved under the Mozilla Public License 2.0.
+
+This project (go2zig) is a joint work developed by WJQSERVER, satomitouka, and satomitoka,
+licensed for use under the terms of the Mozilla Public License 2.0 (MPL2).
+
+Acknowledgments
+---------------
+
+This project is inspired by and references the rust2go project (https://github.com/ihciah/rust2go).
+
+We would like to thank the rust2go team for their pioneering work in Rust-to-Go FFI,
+which provided valuable insights and design patterns for this Go-to-Zig implementation.
+
+The rust2go project is licensed under MIT and Apache-2.0 dual license.

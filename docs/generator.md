@@ -21,7 +21,10 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 
 - 定义公开给 Go 业务使用的 struct 和函数
 - 生成 Zig 枚举对应的 Go 命名类型和常量
+- 生成命名数组别名对应的 Go 命名数组类型
+- 生成 POD 切片别名对应的 Go 命名 slice 和 ABI helper
 - 生成固定长度数组的 ABI 转换 helper
+- 生成 optional tagged wrapper helper
 - 生成 `Go2ZigClient`
 - 默认生成 `Default` 实例和顶层转发函数
 - 定义 ABI 结构和 frame 结构
@@ -30,15 +33,29 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 ## `go2zig_runtime.zig` 的职责
 
 - 提供 `asSlice` / `asBytes`
+- 提供命名 slice alias 的 `asXxx` / `ownXxx`
 - 提供 `ownString` / `ownBytes`
 - 提供返回值内存释放辅助
 - 提供 `ErrorInfo`、`okError`、`makeError`
+- 提供 optional wrapper 的 `toOptional_xxx` / `fromOptional_xxx`
 
 ## `go2zig_exports.zig` 的职责
 
 - 为每个函数生成稳定的 `frame` ABI
 - 导出统一的 `go2zig_call_<name>` 符号
 - 把 Zig `error union` 降级为 `frame.err + frame.out`
+- 把 optional 的 wrapper 和 Zig 原生 optional 做桥接转换
+
+## 当前生成器已经覆盖的类型层次
+
+- primitive
+- enum
+- array / array alias
+- slice alias
+- struct
+- `[]struct`
+- `optional POD`
+- `error union`
 
 ## 为什么要用 frame
 

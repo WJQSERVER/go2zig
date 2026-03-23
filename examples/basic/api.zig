@@ -3,8 +3,45 @@ pub const String = extern struct {
     len: usize,
 };
 
+pub const Digest = [4]u8;
+
 pub const Bytes = extern struct {
     ptr: [*]const u8,
+    len: usize,
+};
+
+pub const ScoreList = extern struct {
+    ptr: ?[*]const u16,
+    len: usize,
+};
+
+pub const UserKindList = extern struct {
+    ptr: ?[*]const UserKind,
+    len: usize,
+};
+
+pub const DigestList = extern struct {
+    ptr: ?[*]const Digest,
+    len: usize,
+};
+
+pub const MetricList = extern struct {
+    ptr: ?[*]const Metric,
+    len: usize,
+};
+
+pub const UserList = extern struct {
+    ptr: ?[*]const User,
+    len: usize,
+};
+
+pub const BucketList = extern struct {
+    ptr: ?[*]const Bucket,
+    len: usize,
+};
+
+pub const ScoreGroupList = extern struct {
+    ptr: ?[*]const ScoreList,
     len: usize,
 };
 
@@ -22,6 +59,16 @@ pub const User = extern struct {
     scores: [3]u16,
 };
 
+pub const Metric = extern struct {
+    kind: UserKind,
+    scores: [3]u16,
+};
+
+pub const Bucket = extern struct {
+    kind: UserKind,
+    scores: ScoreList,
+};
+
 pub const LoginRequest = extern struct {
     user: User,
     password: String,
@@ -31,7 +78,7 @@ pub const LoginResponse = extern struct {
     ok: bool,
     message: String,
     token: Bytes,
-    digest: [4]u8,
+    digest: Digest,
 };
 
 pub const LoginError = error{
@@ -43,4 +90,14 @@ pub extern fn login(req: LoginRequest) LoginResponse;
 pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 pub extern fn rename_user(user: User, next_name: String) User;
 pub extern fn promote_user(user: User, next_kind: UserKind, next_scores: [3]u16) User;
-pub extern fn digest_name(name: String) [4]u8;
+pub extern fn digest_name(name: String) Digest;
+pub extern fn scale_scores(scores: ScoreList, factor: u16) ScoreList;
+pub extern fn mirror_kind_history(history: UserKindList) UserKindList;
+pub extern fn duplicate_digest(seed: String) DigestList;
+pub extern fn mirror_metrics(metrics: MetricList) MetricList;
+pub extern fn mirror_users(users: UserList) UserList;
+pub extern fn mirror_buckets(buckets: BucketList) BucketList;
+pub extern fn maybe_kind(flag: bool) ?UserKind;
+pub extern fn maybe_digest(flag: bool) ?Digest;
+pub extern fn choose_limit(flag: bool, value: ?u32) ?u32;
+pub extern fn mirror_score_groups(groups: ScoreGroupList) ScoreGroupList;

@@ -59,7 +59,48 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 除了基础类型、`String`、`Bytes`、struct 之外，当前还支持：
 
 - 整型底层的 Zig 枚举，例如 `enum(u8)`、`enum(u16)`
+- POD 切片别名，例如 `extern struct { ptr: ?[*]const u16, len: usize }`
 - 固定长度数组，例如 `[4]u8`、`[3]u16`、`[2]UserKind`
+
+当前 POD 切片支持的元素类型：
+
+- 基础数值类型
+- 整型底层枚举
+- 固定长度数组
+- 命名 POD 切片别名
+
+## Optional 协议
+
+当前第一阶段已经支持 `optional POD`：
+
+- `?primitive`
+- `?enum`
+- `?array` / `?array alias`
+
+Go 侧公开类型默认映射为 `*T`，但 ABI 层不会直接依赖 Zig 原生 optional 布局，而是使用显式 tagged wrapper：
+
+- Go ABI：`is_set + value`
+- Zig runtime：`Optional_xxx`
+- Zig bridge：`toOptional_xxx` / `fromOptional_xxx`
+
+这样做的好处是：
+
+- ABI 更稳定
+- Go 侧表达更自然
+- 便于继续扩展到更复杂 optional 组合
+
+## Slice / Struct 生命周期
+
+当切片元素本身还包含切片字段时，生成器会额外生成 `keep` 聚合结果，确保：
+
+- 入参阶段临时 ABI backing buffer 在调用结束前不被回收
+- 嵌套切片字段的 backing buffer 也能被一并保活
+
+返回值侧则采用：
+
+1. 逐元素 `own` 还原 Go 值
+2. 释放元素内部动态字段
+3. 最后释放外层返回缓冲区
 
 数组桥接当前走逐元素转换 helper，这样可以：
 

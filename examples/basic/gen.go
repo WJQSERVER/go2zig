@@ -25,17 +25,27 @@ func NewGo2ZigClient(path string) *Go2ZigClient {
 var Default = NewGo2ZigClient("")
 
 type _go2zigRuntime struct {
-	path             string
-	once             sync.Once
-	lib              *dynlib.Library
-	freeBuf          uintptr
-	procHealth       uintptr
-	procLogin        uintptr
-	procLoginChecked uintptr
-	procRenameUser   uintptr
-	procPromoteUser  uintptr
-	procDigestName   uintptr
-	err              error
+	path                  string
+	once                  sync.Once
+	lib                   *dynlib.Library
+	freeBuf               uintptr
+	procHealth            uintptr
+	procLogin             uintptr
+	procLoginChecked      uintptr
+	procRenameUser        uintptr
+	procPromoteUser       uintptr
+	procDigestName        uintptr
+	procScaleScores       uintptr
+	procMirrorKindHistory uintptr
+	procDuplicateDigest   uintptr
+	procMirrorMetrics     uintptr
+	procMirrorUsers       uintptr
+	procMirrorBuckets     uintptr
+	procMaybeKind         uintptr
+	procMaybeDigest       uintptr
+	procChooseLimit       uintptr
+	procMirrorScoreGroups uintptr
+	err                   error
 }
 
 func (rt *_go2zigRuntime) Load() error {
@@ -78,12 +88,52 @@ func (rt *_go2zigRuntime) Load() error {
 			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_digest_name: %w", err)
 			return
 		}
+		if rt.procScaleScores, err = lib.Lookup("go2zig_call_scale_scores"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_scale_scores: %w", err)
+			return
+		}
+		if rt.procMirrorKindHistory, err = lib.Lookup("go2zig_call_mirror_kind_history"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_kind_history: %w", err)
+			return
+		}
+		if rt.procDuplicateDigest, err = lib.Lookup("go2zig_call_duplicate_digest"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_duplicate_digest: %w", err)
+			return
+		}
+		if rt.procMirrorMetrics, err = lib.Lookup("go2zig_call_mirror_metrics"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_metrics: %w", err)
+			return
+		}
+		if rt.procMirrorUsers, err = lib.Lookup("go2zig_call_mirror_users"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_users: %w", err)
+			return
+		}
+		if rt.procMirrorBuckets, err = lib.Lookup("go2zig_call_mirror_buckets"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_buckets: %w", err)
+			return
+		}
+		if rt.procMaybeKind, err = lib.Lookup("go2zig_call_maybe_kind"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_maybe_kind: %w", err)
+			return
+		}
+		if rt.procMaybeDigest, err = lib.Lookup("go2zig_call_maybe_digest"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_maybe_digest: %w", err)
+			return
+		}
+		if rt.procChooseLimit, err = lib.Lookup("go2zig_call_choose_limit"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_choose_limit: %w", err)
+			return
+		}
+		if rt.procMirrorScoreGroups, err = lib.Lookup("go2zig_call_mirror_score_groups"); err != nil {
+			rt.err = fmt.Errorf("go2zig: lookup go2zig_call_mirror_score_groups: %w", err)
+			return
+		}
 	})
 	return rt.err
 }
 
 func (rt *_go2zigRuntime) free(ptr unsafe.Pointer, len uintptr) {
-	if ptr == nil {
+	if ptr == nil || len == 0 {
 		return
 	}
 	if err := rt.Load(); err != nil {
@@ -164,7 +214,8 @@ func _go2zigRefBytes(value []byte) _go2zigBytes {
 }
 
 func _go2zigOwnString(rt *_go2zigRuntime, value _go2zigString) string {
-	if value.Ptr == nil || value.Len == 0 {
+	_go2zigAssertSpan("String", value.Ptr, value.Len)
+	if value.Ptr == nil {
 		return ""
 	}
 	bytes := unsafe.Slice((*byte)(value.Ptr), int(value.Len))
@@ -174,12 +225,25 @@ func _go2zigOwnString(rt *_go2zigRuntime, value _go2zigString) string {
 }
 
 func _go2zigOwnBytes(rt *_go2zigRuntime, value _go2zigBytes) []byte {
-	if value.Ptr == nil || value.Len == 0 {
+	_go2zigAssertSpan("Bytes", value.Ptr, value.Len)
+	if value.Ptr == nil {
 		return nil
 	}
 	ret := append([]byte(nil), unsafe.Slice((*byte)(value.Ptr), int(value.Len))...)
 	rt.free(value.Ptr, value.Len)
 	return ret
+}
+
+func _go2zigAssertSpan(name string, ptr unsafe.Pointer, len uintptr) {
+	if ptr == nil && len == 0 {
+		return
+	}
+	if len == 0 {
+		return
+	}
+	if ptr == nil {
+		panic(fmt.Sprintf("go2zig: invalid %s buffer state ptr=%p len=%d", name, ptr, len))
+	}
 }
 
 func _go2zigOwnError(rt *_go2zigRuntime, value _go2zigError) error {
@@ -204,6 +268,12 @@ func (e *Go2ZigError) Error() string {
 	return fmt.Sprintf("zig error code %d", e.Code)
 }
 
+func _go2zigKeep(values []any) {
+	for _, value := range values {
+		runtime.KeepAlive(value)
+	}
+}
+
 type UserKind uint8
 
 const (
@@ -211,6 +281,327 @@ const (
 	UserKindMember UserKind = UserKind(1)
 	UserKindAdmin  UserKind = UserKind(2)
 )
+
+type Digest [4]uint8
+
+type _go2zigOptional_optional_1_u32 struct {
+	is_set uint8
+	value  uint32
+}
+
+func _go2zigRefOptional_optional_1_u32(value *uint32) _go2zigOptional_optional_1_u32 {
+	if value == nil {
+		return _go2zigOptional_optional_1_u32{}
+	}
+	return _go2zigOptional_optional_1_u32{is_set: 1, value: uint32(*value)}
+}
+
+func _go2zigOwnOptional_optional_1_u32(rt *_go2zigRuntime, value _go2zigOptional_optional_1_u32) *uint32 {
+	if value.is_set == 0 {
+		return nil
+	}
+	item := uint32(value.value)
+	return &item
+}
+
+type _go2zigOptional_optional_5_UserKind struct {
+	is_set uint8
+	value  uint8
+}
+
+func _go2zigRefOptional_optional_5_UserKind(value *UserKind) _go2zigOptional_optional_5_UserKind {
+	if value == nil {
+		return _go2zigOptional_optional_5_UserKind{}
+	}
+	return _go2zigOptional_optional_5_UserKind{is_set: 1, value: uint8(*value)}
+}
+
+func _go2zigOwnOptional_optional_5_UserKind(rt *_go2zigRuntime, value _go2zigOptional_optional_5_UserKind) *UserKind {
+	if value.is_set == 0 {
+		return nil
+	}
+	item := UserKind(value.value)
+	return &item
+}
+
+type _go2zigOptional_optional_arrayalias_Digest struct {
+	is_set uint8
+	value  [4]uint8
+}
+
+func _go2zigRefOptional_optional_arrayalias_Digest(value *Digest) _go2zigOptional_optional_arrayalias_Digest {
+	if value == nil {
+		return _go2zigOptional_optional_arrayalias_Digest{}
+	}
+	return _go2zigOptional_optional_arrayalias_Digest{is_set: 1, value: _go2zigRefArray_arrayalias_Digest(*value)}
+}
+
+func _go2zigOwnOptional_optional_arrayalias_Digest(rt *_go2zigRuntime, value _go2zigOptional_optional_arrayalias_Digest) *Digest {
+	if value.is_set == 0 {
+		return nil
+	}
+	item := _go2zigOwnArray_arrayalias_Digest(rt, value.value)
+	return &item
+}
+
+type ScoreList []uint16
+
+type _go2zigScoreList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefScoreListResult struct {
+	slice _go2zigScoreList
+	keep  []any
+}
+
+func _go2zigRefScoreList(value ScoreList) _go2zigRefScoreListResult {
+	if len(value) == 0 {
+		return _go2zigRefScoreListResult{}
+	}
+	return _go2zigRefScoreListResult{slice: _go2zigScoreList{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}}
+}
+
+func _go2zigOwnScoreList(rt *_go2zigRuntime, value _go2zigScoreList) ScoreList {
+	_go2zigAssertSpan("ScoreList", value.ptr, value.len)
+	if value.ptr == nil {
+		return nil
+	}
+	src := unsafe.Slice((*uint16)(value.ptr), int(value.len))
+	ret := make(ScoreList, len(src))
+	for i := range src {
+		ret[i] = uint16(src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(uint16(0))))
+	return ret
+}
+
+type UserKindList []UserKind
+
+type _go2zigUserKindList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefUserKindListResult struct {
+	slice _go2zigUserKindList
+	keep  []any
+}
+
+func _go2zigRefUserKindList(value UserKindList) _go2zigRefUserKindListResult {
+	if len(value) == 0 {
+		return _go2zigRefUserKindListResult{}
+	}
+	return _go2zigRefUserKindListResult{slice: _go2zigUserKindList{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}}
+}
+
+func _go2zigOwnUserKindList(rt *_go2zigRuntime, value _go2zigUserKindList) UserKindList {
+	_go2zigAssertSpan("UserKindList", value.ptr, value.len)
+	if value.ptr == nil {
+		return nil
+	}
+	src := unsafe.Slice((*uint8)(value.ptr), int(value.len))
+	ret := make(UserKindList, len(src))
+	for i := range src {
+		ret[i] = UserKind(src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(uint8(0))))
+	return ret
+}
+
+type DigestList []Digest
+
+type _go2zigDigestList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefDigestListResult struct {
+	slice _go2zigDigestList
+	keep  []any
+}
+
+func _go2zigRefDigestList(value DigestList) _go2zigRefDigestListResult {
+	if len(value) == 0 {
+		return _go2zigRefDigestListResult{}
+	}
+	return _go2zigRefDigestListResult{slice: _go2zigDigestList{ptr: unsafe.Pointer(unsafe.SliceData(value)), len: uintptr(len(value))}}
+}
+
+func _go2zigOwnDigestList(rt *_go2zigRuntime, value _go2zigDigestList) DigestList {
+	_go2zigAssertSpan("DigestList", value.ptr, value.len)
+	if value.ptr == nil {
+		return nil
+	}
+	src := unsafe.Slice((*[4]uint8)(value.ptr), int(value.len))
+	ret := make(DigestList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnArray_arrayalias_Digest(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof([4]uint8{})))
+	return ret
+}
+
+type MetricList []Metric
+
+type _go2zigMetricList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefMetricListResult struct {
+	slice _go2zigMetricList
+	keep  []any
+}
+
+func _go2zigRefMetricList(value MetricList) _go2zigRefMetricListResult {
+	if len(value) == 0 {
+		return _go2zigRefMetricListResult{}
+	}
+	buf := make([]_go2zigMetric, len(value))
+	var keep []any
+	for i := range value {
+		item := _go2zigRefMetric(value[i])
+		buf[i] = item.value
+		keep = append(keep, item.keep...)
+	}
+	return _go2zigRefMetricListResult{slice: _go2zigMetricList{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: append([]any{buf}, keep...)}
+}
+
+func _go2zigOwnMetricList(rt *_go2zigRuntime, value _go2zigMetricList) MetricList {
+	_go2zigAssertSpan("MetricList", value.ptr, value.len)
+	if value.ptr == nil {
+		return nil
+	}
+	src := unsafe.Slice((*_go2zigMetric)(value.ptr), int(value.len))
+	ret := make(MetricList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnMetric(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(_go2zigMetric{})))
+	return ret
+}
+
+type UserList []User
+
+type _go2zigUserList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefUserListResult struct {
+	slice _go2zigUserList
+	keep  []any
+}
+
+func _go2zigRefUserList(value UserList) _go2zigRefUserListResult {
+	if len(value) == 0 {
+		return _go2zigRefUserListResult{}
+	}
+	buf := make([]_go2zigUser, len(value))
+	var keep []any
+	for i := range value {
+		item := _go2zigRefUser(value[i])
+		buf[i] = item.value
+		keep = append(keep, item.keep...)
+	}
+	return _go2zigRefUserListResult{slice: _go2zigUserList{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: append([]any{buf}, keep...)}
+}
+
+func _go2zigOwnUserList(rt *_go2zigRuntime, value _go2zigUserList) UserList {
+	_go2zigAssertSpan("UserList", value.ptr, value.len)
+	if value.ptr == nil {
+		return nil
+	}
+	src := unsafe.Slice((*_go2zigUser)(value.ptr), int(value.len))
+	ret := make(UserList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnUser(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(_go2zigUser{})))
+	return ret
+}
+
+type BucketList []Bucket
+
+type _go2zigBucketList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefBucketListResult struct {
+	slice _go2zigBucketList
+	keep  []any
+}
+
+func _go2zigRefBucketList(value BucketList) _go2zigRefBucketListResult {
+	if len(value) == 0 {
+		return _go2zigRefBucketListResult{}
+	}
+	buf := make([]_go2zigBucket, len(value))
+	var keep []any
+	for i := range value {
+		item := _go2zigRefBucket(value[i])
+		buf[i] = item.value
+		keep = append(keep, item.keep...)
+	}
+	return _go2zigRefBucketListResult{slice: _go2zigBucketList{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: append([]any{buf}, keep...)}
+}
+
+func _go2zigOwnBucketList(rt *_go2zigRuntime, value _go2zigBucketList) BucketList {
+	_go2zigAssertSpan("BucketList", value.ptr, value.len)
+	if value.ptr == nil {
+		return nil
+	}
+	src := unsafe.Slice((*_go2zigBucket)(value.ptr), int(value.len))
+	ret := make(BucketList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnBucket(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(_go2zigBucket{})))
+	return ret
+}
+
+type ScoreGroupList []ScoreList
+
+type _go2zigScoreGroupList struct {
+	ptr unsafe.Pointer
+	len uintptr
+}
+
+type _go2zigRefScoreGroupListResult struct {
+	slice _go2zigScoreGroupList
+	keep  []any
+}
+
+func _go2zigRefScoreGroupList(value ScoreGroupList) _go2zigRefScoreGroupListResult {
+	if len(value) == 0 {
+		return _go2zigRefScoreGroupListResult{}
+	}
+	buf := make([]_go2zigScoreList, len(value))
+	var keep []any
+	for i := range value {
+		item := _go2zigRefScoreList(value[i])
+		buf[i] = item.slice
+		keep = append(keep, item.keep...)
+	}
+	return _go2zigRefScoreGroupListResult{slice: _go2zigScoreGroupList{ptr: unsafe.Pointer(unsafe.SliceData(buf)), len: uintptr(len(buf))}, keep: append([]any{buf}, keep...)}
+}
+
+func _go2zigOwnScoreGroupList(rt *_go2zigRuntime, value _go2zigScoreGroupList) ScoreGroupList {
+	_go2zigAssertSpan("ScoreGroupList", value.ptr, value.len)
+	if value.ptr == nil {
+		return nil
+	}
+	src := unsafe.Slice((*_go2zigScoreList)(value.ptr), int(value.len))
+	ret := make(ScoreGroupList, len(src))
+	for i := range src {
+		ret[i] = _go2zigOwnScoreList(rt, src[i])
+	}
+	rt.free(value.ptr, value.len*uintptr(unsafe.Sizeof(_go2zigScoreList{})))
+	return ret
+}
 
 func _go2zigRefArray_array_3_1_u16(value [3]uint16) [3]uint16 {
 	var out [3]uint16
@@ -244,6 +635,22 @@ func _go2zigOwnArray_array_4_1_u8(rt *_go2zigRuntime, value [4]uint8) [4]uint8 {
 	return out
 }
 
+func _go2zigRefArray_arrayalias_Digest(value Digest) [4]uint8 {
+	var out [4]uint8
+	for i := range value {
+		out[i] = uint8(value[i])
+	}
+	return out
+}
+
+func _go2zigOwnArray_arrayalias_Digest(rt *_go2zigRuntime, value [4]uint8) Digest {
+	var out Digest
+	for i := range value {
+		out[i] = uint8(value[i])
+	}
+	return out
+}
+
 type User struct {
 	ID     uint64
 	Kind   UserKind
@@ -260,14 +667,20 @@ type _go2zigUser struct {
 	scores [3]uint16
 }
 
-func _go2zigRefUser(value User) _go2zigUser {
-	return _go2zigUser{
-		id:     uint64(value.ID),
-		kind:   uint8(value.Kind),
-		name:   _go2zigRefString(value.Name),
-		email:  _go2zigRefString(value.Email),
-		scores: _go2zigRefArray_array_3_1_u16(value.Scores),
-	}
+type _go2zigRefUserResult struct {
+	value _go2zigUser
+	keep  []any
+}
+
+func _go2zigRefUser(value User) _go2zigRefUserResult {
+	var out _go2zigUser
+	var keep []any
+	out.id = uint64(value.ID)
+	out.kind = uint8(value.Kind)
+	out.name = _go2zigRefString(value.Name)
+	out.email = _go2zigRefString(value.Email)
+	out.scores = _go2zigRefArray_array_3_1_u16(value.Scores)
+	return _go2zigRefUserResult{value: out, keep: keep}
 }
 
 func _go2zigOwnUser(rt *_go2zigRuntime, value _go2zigUser) User {
@@ -277,6 +690,68 @@ func _go2zigOwnUser(rt *_go2zigRuntime, value _go2zigUser) User {
 		Name:   _go2zigOwnString(rt, value.name),
 		Email:  _go2zigOwnString(rt, value.email),
 		Scores: _go2zigOwnArray_array_3_1_u16(rt, value.scores),
+	}
+}
+
+type Metric struct {
+	Kind   UserKind
+	Scores [3]uint16
+}
+
+type _go2zigMetric struct {
+	kind   uint8
+	scores [3]uint16
+}
+
+type _go2zigRefMetricResult struct {
+	value _go2zigMetric
+	keep  []any
+}
+
+func _go2zigRefMetric(value Metric) _go2zigRefMetricResult {
+	var out _go2zigMetric
+	var keep []any
+	out.kind = uint8(value.Kind)
+	out.scores = _go2zigRefArray_array_3_1_u16(value.Scores)
+	return _go2zigRefMetricResult{value: out, keep: keep}
+}
+
+func _go2zigOwnMetric(rt *_go2zigRuntime, value _go2zigMetric) Metric {
+	return Metric{
+		Kind:   UserKind(value.kind),
+		Scores: _go2zigOwnArray_array_3_1_u16(rt, value.scores),
+	}
+}
+
+type Bucket struct {
+	Kind   UserKind
+	Scores ScoreList
+}
+
+type _go2zigBucket struct {
+	kind   uint8
+	scores _go2zigScoreList
+}
+
+type _go2zigRefBucketResult struct {
+	value _go2zigBucket
+	keep  []any
+}
+
+func _go2zigRefBucket(value Bucket) _go2zigRefBucketResult {
+	var out _go2zigBucket
+	var keep []any
+	out.kind = uint8(value.Kind)
+	_keepScores := _go2zigRefScoreList(value.Scores)
+	out.scores = _keepScores.slice
+	keep = append(keep, _keepScores.keep...)
+	return _go2zigRefBucketResult{value: out, keep: keep}
+}
+
+func _go2zigOwnBucket(rt *_go2zigRuntime, value _go2zigBucket) Bucket {
+	return Bucket{
+		Kind:   UserKind(value.kind),
+		Scores: _go2zigOwnScoreList(rt, value.scores),
 	}
 }
 
@@ -290,11 +765,17 @@ type _go2zigLoginRequest struct {
 	password _go2zigString
 }
 
-func _go2zigRefLoginRequest(value LoginRequest) _go2zigLoginRequest {
-	return _go2zigLoginRequest{
-		user:     _go2zigRefUser(value.User),
-		password: _go2zigRefString(value.Password),
-	}
+type _go2zigRefLoginRequestResult struct {
+	value _go2zigLoginRequest
+	keep  []any
+}
+
+func _go2zigRefLoginRequest(value LoginRequest) _go2zigRefLoginRequestResult {
+	var out _go2zigLoginRequest
+	var keep []any
+	out.user = _go2zigRefUser(value.User).value
+	out.password = _go2zigRefString(value.Password)
+	return _go2zigRefLoginRequestResult{value: out, keep: keep}
 }
 
 func _go2zigOwnLoginRequest(rt *_go2zigRuntime, value _go2zigLoginRequest) LoginRequest {
@@ -318,13 +799,19 @@ type _go2zigLoginResponse struct {
 	digest  [4]uint8
 }
 
-func _go2zigRefLoginResponse(value LoginResponse) _go2zigLoginResponse {
-	return _go2zigLoginResponse{
-		ok:      _go2zigBool(value.OK),
-		message: _go2zigRefString(value.Message),
-		token:   _go2zigRefBytes(value.Token),
-		digest:  _go2zigRefArray_array_4_1_u8(value.Digest),
-	}
+type _go2zigRefLoginResponseResult struct {
+	value _go2zigLoginResponse
+	keep  []any
+}
+
+func _go2zigRefLoginResponse(value LoginResponse) _go2zigRefLoginResponseResult {
+	var out _go2zigLoginResponse
+	var keep []any
+	out.ok = _go2zigBool(value.OK)
+	out.message = _go2zigRefString(value.Message)
+	out.token = _go2zigRefBytes(value.Token)
+	out.digest = _go2zigRefArray_array_4_1_u8(value.Digest)
+	return _go2zigRefLoginResponseResult{value: out, keep: keep}
 }
 
 func _go2zigOwnLoginResponse(rt *_go2zigRuntime, value _go2zigLoginResponse) LoginResponse {
@@ -369,6 +856,58 @@ type _go2zigCallDigestName struct {
 	out  [4]uint8
 }
 
+type _go2zigCallScaleScores struct {
+	scores _go2zigScoreList
+	factor uint16
+	out    _go2zigScoreList
+}
+
+type _go2zigCallMirrorKindHistory struct {
+	history _go2zigUserKindList
+	out     _go2zigUserKindList
+}
+
+type _go2zigCallDuplicateDigest struct {
+	seed _go2zigString
+	out  _go2zigDigestList
+}
+
+type _go2zigCallMirrorMetrics struct {
+	metrics _go2zigMetricList
+	out     _go2zigMetricList
+}
+
+type _go2zigCallMirrorUsers struct {
+	users _go2zigUserList
+	out   _go2zigUserList
+}
+
+type _go2zigCallMirrorBuckets struct {
+	buckets _go2zigBucketList
+	out     _go2zigBucketList
+}
+
+type _go2zigCallMaybeKind struct {
+	flag uint8
+	out  _go2zigOptional_optional_5_UserKind
+}
+
+type _go2zigCallMaybeDigest struct {
+	flag uint8
+	out  _go2zigOptional_optional_arrayalias_Digest
+}
+
+type _go2zigCallChooseLimit struct {
+	flag  uint8
+	value _go2zigOptional_optional_1_u32
+	out   _go2zigOptional_optional_1_u32
+}
+
+type _go2zigCallMirrorScoreGroups struct {
+	groups _go2zigScoreGroupList
+	out    _go2zigScoreGroupList
+}
+
 func (c *Go2ZigClient) Health() bool {
 	var frame _go2zigCallHealth
 	c.rt.call(c.rt.procHealth, unsafe.Pointer(&frame))
@@ -381,7 +920,7 @@ func Health() bool {
 
 func (c *Go2ZigClient) Login(req LoginRequest) LoginResponse {
 	var frame _go2zigCallLogin
-	frame.req = _go2zigRefLoginRequest(req)
+	frame.req = _go2zigRefLoginRequest(req).value
 	c.rt.call(c.rt.procLogin, unsafe.Pointer(&frame))
 	runtime.KeepAlive(req)
 	return _go2zigOwnLoginResponse(c.rt, frame.out)
@@ -393,7 +932,7 @@ func Login(req LoginRequest) LoginResponse {
 
 func (c *Go2ZigClient) LoginChecked(req LoginRequest) (LoginResponse, error) {
 	var frame _go2zigCallLoginChecked
-	frame.req = _go2zigRefLoginRequest(req)
+	frame.req = _go2zigRefLoginRequest(req).value
 	c.rt.call(c.rt.procLoginChecked, unsafe.Pointer(&frame))
 	runtime.KeepAlive(req)
 	if err := _go2zigOwnError(c.rt, frame.err); err != nil {
@@ -409,7 +948,7 @@ func LoginChecked(req LoginRequest) (LoginResponse, error) {
 
 func (c *Go2ZigClient) RenameUser(user User, nextName string) User {
 	var frame _go2zigCallRenameUser
-	frame.user = _go2zigRefUser(user)
+	frame.user = _go2zigRefUser(user).value
 	frame.next_name = _go2zigRefString(nextName)
 	c.rt.call(c.rt.procRenameUser, unsafe.Pointer(&frame))
 	runtime.KeepAlive(user)
@@ -423,7 +962,7 @@ func RenameUser(user User, nextName string) User {
 
 func (c *Go2ZigClient) PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User {
 	var frame _go2zigCallPromoteUser
-	frame.user = _go2zigRefUser(user)
+	frame.user = _go2zigRefUser(user).value
 	frame.next_kind = uint8(nextKind)
 	frame.next_scores = _go2zigRefArray_array_3_1_u16(nextScores)
 	c.rt.call(c.rt.procPromoteUser, unsafe.Pointer(&frame))
@@ -437,14 +976,150 @@ func PromoteUser(user User, nextKind UserKind, nextScores [3]uint16) User {
 	return Default.PromoteUser(user, nextKind, nextScores)
 }
 
-func (c *Go2ZigClient) DigestName(name string) [4]uint8 {
+func (c *Go2ZigClient) DigestName(name string) Digest {
 	var frame _go2zigCallDigestName
 	frame.name = _go2zigRefString(name)
 	c.rt.call(c.rt.procDigestName, unsafe.Pointer(&frame))
 	runtime.KeepAlive(name)
-	return _go2zigOwnArray_array_4_1_u8(c.rt, frame.out)
+	return _go2zigOwnArray_arrayalias_Digest(c.rt, frame.out)
 }
 
-func DigestName(name string) [4]uint8 {
+func DigestName(name string) Digest {
 	return Default.DigestName(name)
+}
+
+func (c *Go2ZigClient) ScaleScores(scores ScoreList, factor uint16) ScoreList {
+	var frame _go2zigCallScaleScores
+	_keepScores := _go2zigRefScoreList(scores)
+	frame.scores = _keepScores.slice
+	frame.factor = uint16(factor)
+	c.rt.call(c.rt.procScaleScores, unsafe.Pointer(&frame))
+	runtime.KeepAlive(scores)
+	runtime.KeepAlive(factor)
+	_go2zigKeep(_keepScores.keep)
+	return _go2zigOwnScoreList(c.rt, frame.out)
+}
+
+func ScaleScores(scores ScoreList, factor uint16) ScoreList {
+	return Default.ScaleScores(scores, factor)
+}
+
+func (c *Go2ZigClient) MirrorKindHistory(history UserKindList) UserKindList {
+	var frame _go2zigCallMirrorKindHistory
+	_keepHistory := _go2zigRefUserKindList(history)
+	frame.history = _keepHistory.slice
+	c.rt.call(c.rt.procMirrorKindHistory, unsafe.Pointer(&frame))
+	runtime.KeepAlive(history)
+	_go2zigKeep(_keepHistory.keep)
+	return _go2zigOwnUserKindList(c.rt, frame.out)
+}
+
+func MirrorKindHistory(history UserKindList) UserKindList {
+	return Default.MirrorKindHistory(history)
+}
+
+func (c *Go2ZigClient) DuplicateDigest(seed string) DigestList {
+	var frame _go2zigCallDuplicateDigest
+	frame.seed = _go2zigRefString(seed)
+	c.rt.call(c.rt.procDuplicateDigest, unsafe.Pointer(&frame))
+	runtime.KeepAlive(seed)
+	return _go2zigOwnDigestList(c.rt, frame.out)
+}
+
+func DuplicateDigest(seed string) DigestList {
+	return Default.DuplicateDigest(seed)
+}
+
+func (c *Go2ZigClient) MirrorMetrics(metrics MetricList) MetricList {
+	var frame _go2zigCallMirrorMetrics
+	_keepMetrics := _go2zigRefMetricList(metrics)
+	frame.metrics = _keepMetrics.slice
+	c.rt.call(c.rt.procMirrorMetrics, unsafe.Pointer(&frame))
+	runtime.KeepAlive(metrics)
+	_go2zigKeep(_keepMetrics.keep)
+	return _go2zigOwnMetricList(c.rt, frame.out)
+}
+
+func MirrorMetrics(metrics MetricList) MetricList {
+	return Default.MirrorMetrics(metrics)
+}
+
+func (c *Go2ZigClient) MirrorUsers(users UserList) UserList {
+	var frame _go2zigCallMirrorUsers
+	_keepUsers := _go2zigRefUserList(users)
+	frame.users = _keepUsers.slice
+	c.rt.call(c.rt.procMirrorUsers, unsafe.Pointer(&frame))
+	runtime.KeepAlive(users)
+	_go2zigKeep(_keepUsers.keep)
+	return _go2zigOwnUserList(c.rt, frame.out)
+}
+
+func MirrorUsers(users UserList) UserList {
+	return Default.MirrorUsers(users)
+}
+
+func (c *Go2ZigClient) MirrorBuckets(buckets BucketList) BucketList {
+	var frame _go2zigCallMirrorBuckets
+	_keepBuckets := _go2zigRefBucketList(buckets)
+	frame.buckets = _keepBuckets.slice
+	c.rt.call(c.rt.procMirrorBuckets, unsafe.Pointer(&frame))
+	runtime.KeepAlive(buckets)
+	_go2zigKeep(_keepBuckets.keep)
+	return _go2zigOwnBucketList(c.rt, frame.out)
+}
+
+func MirrorBuckets(buckets BucketList) BucketList {
+	return Default.MirrorBuckets(buckets)
+}
+
+func (c *Go2ZigClient) MaybeKind(flag bool) *UserKind {
+	var frame _go2zigCallMaybeKind
+	frame.flag = _go2zigBool(flag)
+	c.rt.call(c.rt.procMaybeKind, unsafe.Pointer(&frame))
+	runtime.KeepAlive(flag)
+	return _go2zigOwnOptional_optional_5_UserKind(c.rt, frame.out)
+}
+
+func MaybeKind(flag bool) *UserKind {
+	return Default.MaybeKind(flag)
+}
+
+func (c *Go2ZigClient) MaybeDigest(flag bool) *Digest {
+	var frame _go2zigCallMaybeDigest
+	frame.flag = _go2zigBool(flag)
+	c.rt.call(c.rt.procMaybeDigest, unsafe.Pointer(&frame))
+	runtime.KeepAlive(flag)
+	return _go2zigOwnOptional_optional_arrayalias_Digest(c.rt, frame.out)
+}
+
+func MaybeDigest(flag bool) *Digest {
+	return Default.MaybeDigest(flag)
+}
+
+func (c *Go2ZigClient) ChooseLimit(flag bool, value *uint32) *uint32 {
+	var frame _go2zigCallChooseLimit
+	frame.flag = _go2zigBool(flag)
+	frame.value = _go2zigRefOptional_optional_1_u32(value)
+	c.rt.call(c.rt.procChooseLimit, unsafe.Pointer(&frame))
+	runtime.KeepAlive(flag)
+	runtime.KeepAlive(value)
+	return _go2zigOwnOptional_optional_1_u32(c.rt, frame.out)
+}
+
+func ChooseLimit(flag bool, value *uint32) *uint32 {
+	return Default.ChooseLimit(flag, value)
+}
+
+func (c *Go2ZigClient) MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList {
+	var frame _go2zigCallMirrorScoreGroups
+	_keepGroups := _go2zigRefScoreGroupList(groups)
+	frame.groups = _keepGroups.slice
+	c.rt.call(c.rt.procMirrorScoreGroups, unsafe.Pointer(&frame))
+	runtime.KeepAlive(groups)
+	_go2zigKeep(_keepGroups.keep)
+	return _go2zigOwnScoreGroupList(c.rt, frame.out)
+}
+
+func MirrorScoreGroups(groups ScoreGroupList) ScoreGroupList {
+	return Default.MirrorScoreGroups(groups)
 }

@@ -16,6 +16,8 @@ const (
 	TypeBytes
 	TypeStruct
 	TypeEnum
+	TypeOptional
+	TypeSlice
 	TypeArray
 )
 
@@ -46,6 +48,7 @@ type TypeRef struct {
 	Kind      TypeKind
 	Raw       string
 	Name      string
+	Alias     string
 	Primitive PrimitiveInfo
 	Elem      *TypeRef
 	ArrayLen  int
@@ -73,6 +76,16 @@ type Enum struct {
 	Values    []EnumValue
 }
 
+type Slice struct {
+	Name string
+	Elem TypeRef
+}
+
+type ArrayAlias struct {
+	Name string
+	Type TypeRef
+}
+
 type Function struct {
 	Name   string
 	Params []Field
@@ -83,13 +96,17 @@ type Function struct {
 type API struct {
 	Structs []*Struct
 	Enums   []*Enum
+	Slices  []*Slice
+	Arrays  []*ArrayAlias
 	Funcs   []*Function
 
 	structByName map[string]*Struct
 	enumByName   map[string]*Enum
+	sliceByName  map[string]*Slice
+	arrayByName  map[string]*ArrayAlias
 }
 
-func New(structs []*Struct, enums []*Enum, funcs []*Function) (*API, error) {
+func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias, funcs []*Function) (*API, error) {
 	structByName := make(map[string]*Struct, len(structs))
 	for _, item := range structs {
 		if _, ok := structByName[item.Name]; ok {
@@ -114,12 +131,77 @@ func New(structs []*Struct, enums []*Enum, funcs []*Function) (*API, error) {
 		enumByName[item.Name] = item
 	}
 
+	sliceByName := make(map[string]*Slice, len(slices))
+	for _, item := range slices {
+		if _, ok := structByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := enumByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := sliceByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate slice %q", item.Name)
+		}
+		sliceByName[item.Name] = item
+	}
+
+	arrayByName := make(map[string]*ArrayAlias, len(arrays))
+	for _, item := range arrays {
+		if _, ok := structByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := enumByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := sliceByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate type %q", item.Name)
+		}
+		if _, ok := arrayByName[item.Name]; ok {
+			return nil, fmt.Errorf("duplicate array alias %q", item.Name)
+		}
+		arrayByName[item.Name] = item
+	}
+
 	api := &API{
 		Structs:      structs,
 		Enums:        enums,
+		Slices:       slices,
+		Arrays:       arrays,
 		Funcs:        funcs,
 		structByName: structByName,
 		enumByName:   enumByName,
+		sliceByName:  sliceByName,
+		arrayByName:  arrayByName,
+	}
+
+	for _, item := range structs {
+		for i := range item.Fields {
+			if err := api.resolveType(&item.Fields[i].Type, "struct "+item.Name); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for _, item := range arrays {
+		if err := api.resolveType(&item.Type, "array alias "+item.Name); err != nil {
+			return nil, err
+		}
+		if item.Type.Kind != TypeArray {
+			return nil, fmt.Errorf("array alias %q must reference an array type", item.Name)
+		}
+		item.Type.Alias = item.Name
+	}
+
+	for _, item := range slices {
+		if err := api.resolveType(&item.Elem, "slice "+item.Name); err != nil {
+			return nil, err
+		}
+		if item.Elem.Kind == TypeString || item.Elem.Kind == TypeBytes {
+			return nil, fmt.Errorf("slice %q uses unsupported element type %q", item.Name, item.Elem.TypeName())
+		}
+		if !api.SupportsSliceElem(item.Elem) {
+			return nil, fmt.Errorf("slice %q uses unsupported element type %q", item.Name, item.Elem.TypeName())
+		}
 	}
 
 	for _, item := range structs {
@@ -155,10 +237,31 @@ func (a *API) resolveType(t *TypeRef, owner string) error {
 			t.Primitive = enum.Primitive
 			return nil
 		}
+		if slice, ok := a.sliceByName[t.Name]; ok {
+			t.Kind = TypeSlice
+			elem := slice.Elem.Clone()
+			t.Elem = &elem
+			return nil
+		}
+		if array, ok := a.arrayByName[t.Name]; ok {
+			copy := array.Type.Clone()
+			*t = copy
+			return nil
+		}
 		return fmt.Errorf("%s uses unknown type %q", owner, t.Name)
 	case TypeArray:
 		if t.Elem == nil {
 			return fmt.Errorf("%s uses malformed array type %q", owner, t.Raw)
+		}
+		return a.resolveType(t.Elem, owner)
+	case TypeSlice:
+		if t.Elem == nil {
+			return fmt.Errorf("%s uses malformed slice type %q", owner, t.Raw)
+		}
+		return a.resolveType(t.Elem, owner)
+	case TypeOptional:
+		if t.Elem == nil {
+			return fmt.Errorf("%s uses malformed optional type %q", owner, t.Raw)
 		}
 		return a.resolveType(t.Elem, owner)
 	default:
@@ -193,7 +296,17 @@ func (t TypeRef) TypeName() string {
 	switch t.Kind {
 	case TypeStruct, TypeEnum:
 		return t.Name
+	case TypeOptional:
+		if t.Elem == nil {
+			return t.Raw
+		}
+		return "?" + t.Elem.TypeName()
+	case TypeSlice:
+		return t.Name
 	case TypeArray:
+		if t.Alias != "" {
+			return t.Alias
+		}
 		if t.Elem == nil {
 			return t.Raw
 		}
@@ -205,7 +318,20 @@ func (t TypeRef) TypeName() string {
 
 func (t TypeRef) Key() string {
 	switch t.Kind {
+	case TypeSlice:
+		if t.Elem == nil {
+			return strings.TrimSpace(t.Raw)
+		}
+		return fmt.Sprintf("slice:%s", t.Elem.Key())
+	case TypeOptional:
+		if t.Elem == nil {
+			return strings.TrimSpace(t.Raw)
+		}
+		return fmt.Sprintf("optional:%s", t.Elem.Key())
 	case TypeArray:
+		if t.Alias != "" {
+			return "arrayalias:" + t.Alias
+		}
 		if t.Elem == nil {
 			return strings.TrimSpace(t.Raw)
 		}
@@ -223,6 +349,14 @@ func (a *API) Enum(name string) *Enum {
 	return a.enumByName[name]
 }
 
+func (a *API) Slice(name string) *Slice {
+	return a.sliceByName[name]
+}
+
+func (a *API) ArrayAlias(name string) *ArrayAlias {
+	return a.arrayByName[name]
+}
+
 func (a *API) StructNeedsAllocation(name string) bool {
 	return a.typeNeedsAllocation(TypeRef{Kind: TypeStruct, Name: name, Raw: name}, map[string]bool{})
 }
@@ -235,6 +369,13 @@ func (a *API) typeNeedsAllocation(t TypeRef, seen map[string]bool) bool {
 	switch t.Kind {
 	case TypeString, TypeBytes:
 		return true
+	case TypeSlice:
+		return false
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.typeNeedsAllocation(*t.Elem, seen)
 	case TypeArray:
 		if t.Elem == nil {
 			return false
@@ -266,6 +407,13 @@ func (a *API) typeNeedsFree(t TypeRef, seen map[string]bool) bool {
 	switch t.Kind {
 	case TypeString, TypeBytes:
 		return true
+	case TypeSlice:
+		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.typeNeedsFree(*t.Elem, seen)
 	case TypeArray:
 		if t.Elem == nil {
 			return false
@@ -317,6 +465,16 @@ func (a *API) SortedStructs() ([]*Struct, error) {
 				return fmt.Errorf("%s uses malformed array type %q", owner, t.Raw)
 			}
 			return visitType(owner, *t.Elem)
+		case TypeSlice:
+			if t.Elem == nil {
+				return fmt.Errorf("%s uses malformed slice type %q", owner, t.Raw)
+			}
+			return visitType(owner, *t.Elem)
+		case TypeOptional:
+			if t.Elem == nil {
+				return fmt.Errorf("%s uses malformed optional type %q", owner, t.Raw)
+			}
+			return visitType(owner, *t.Elem)
 		default:
 			return nil
 		}
@@ -347,4 +505,108 @@ func (a *API) SortedStructs() ([]*Struct, error) {
 	}
 
 	return order, nil
+}
+
+func (a *API) IsPOD(t TypeRef) bool {
+	switch t.Kind {
+	case TypePrimitive, TypeEnum:
+		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
+	case TypeSlice:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
+	case TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
+	case TypeStruct:
+		item := a.Struct(t.Name)
+		if item == nil {
+			return false
+		}
+		for _, field := range item.Fields {
+			if !a.IsPOD(field.Type) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *API) SupportsSliceElem(t TypeRef) bool {
+	switch t.Kind {
+	case TypePrimitive, TypeEnum, TypeString, TypeBytes:
+		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
+	case TypeSlice:
+		if t.Elem == nil {
+			return false
+		}
+		return a.IsPOD(*t.Elem)
+	case TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return a.SupportsSliceElem(*t.Elem)
+	case TypeStruct:
+		item := a.Struct(t.Name)
+		if item == nil {
+			return false
+		}
+		for _, field := range item.Fields {
+			if field.Type.Kind == TypeSlice {
+				if field.Type.Elem == nil || !a.IsPOD(*field.Type.Elem) {
+					return false
+				}
+				continue
+			}
+			if !a.SupportsSliceElem(field.Type) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *API) TypeNeedsKeepAlive(t TypeRef) bool {
+	switch t.Kind {
+	case TypeSlice:
+		return true
+	case TypeOptional:
+		if t.Elem == nil {
+			return false
+		}
+		return a.TypeNeedsKeepAlive(*t.Elem)
+	case TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return a.TypeNeedsKeepAlive(*t.Elem)
+	case TypeStruct:
+		item := a.Struct(t.Name)
+		if item == nil {
+			return false
+		}
+		for _, field := range item.Fields {
+			if a.TypeNeedsKeepAlive(field.Type) {
+				return true
+			}
+		}
+	}
+	return false
 }

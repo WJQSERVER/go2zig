@@ -12,6 +12,8 @@ func TestSortedStructs(t *testing.T) {
 		},
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -39,6 +41,8 @@ func TestSortedStructsRejectsCycle(t *testing.T) {
 		},
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -57,6 +61,8 @@ func TestTypeNeedsAllocationAndArena(t *testing.T) {
 			{Name: "User", Fields: []Field{{Name: "name", Type: TypeRef{Kind: TypeString, Name: "String", Raw: "String"}}}},
 			{Name: "Wrapper", Fields: []Field{{Name: "user", Type: TypeRef{Kind: TypeStruct, Name: "User", Raw: "User"}}}},
 		},
+		nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -95,6 +101,8 @@ func TestNewResolvesEnumsAndArrays(t *testing.T) {
 			},
 		}},
 		[]*Enum{{Name: "UserKind", BaseName: "u8", Values: []EnumValue{{Name: "guest"}, {Name: "member"}}}},
+		nil,
+		nil,
 		[]*Function{{Name: "digest", Return: TypeRef{Kind: TypeArray, Raw: "[3]UserKind", ArrayLen: 3, Elem: &TypeRef{Kind: TypeStruct, Name: "UserKind", Raw: "UserKind"}}}},
 	)
 	if err != nil {
@@ -105,5 +113,156 @@ func TestNewResolvesEnumsAndArrays(t *testing.T) {
 	}
 	if got := api.Funcs[0].Return.Elem.Kind; got != TypeEnum {
 		t.Fatalf("digest elem kind = %v, want enum", got)
+	}
+}
+
+func TestNewResolvesPODSliceAliases(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		nil,
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}},
+		nil,
+		[]*Function{{Name: "scale_scores", Params: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}, Return: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}},
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := api.Funcs[0].Params[0].Type.Kind; got != TypeSlice {
+		t.Fatalf("scale_scores param kind = %v, want slice", got)
+	}
+	if !api.TypeNeedsFree(api.Funcs[0].Return) {
+		t.Fatal("slice return should require free")
+	}
+	if api.FunctionNeedsArena(api.Funcs[0]) {
+		t.Fatal("POD slice params should not require arena allocation")
+	}
+}
+
+func TestOptionalPODTraits(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(nil, nil, nil, nil, []*Function{{
+		Name: "choose_limit",
+		Params: []Field{{
+			Name: "value",
+			Type: TypeRef{Kind: TypeOptional, Raw: "?u32", Elem: &TypeRef{Kind: TypePrimitive, Name: "u32", Raw: "u32", Primitive: PrimitiveInfo{Go: "uint32", Zig: "u32"}}},
+		}},
+		Return: TypeRef{Kind: TypeOptional, Raw: "?u32", Elem: &TypeRef{Kind: TypePrimitive, Name: "u32", Raw: "u32", Primitive: PrimitiveInfo{Go: "uint32", Zig: "u32"}}},
+	}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.IsPOD(api.Funcs[0].Params[0].Type) {
+		t.Fatal("optional u32 should be POD")
+	}
+	if api.TypeNeedsFree(api.Funcs[0].Return) {
+		t.Fatal("optional u32 should not require free")
+	}
+	if api.TypeNeedsKeepAlive(api.Funcs[0].Return) {
+		t.Fatal("optional u32 should not require keepalive")
+	}
+}
+
+func TestNewRejectsDuplicateArrayAlias(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(
+		nil,
+		nil,
+		nil,
+		[]*ArrayAlias{{Name: "Digest", Type: TypeRef{Kind: TypeArray, Raw: "[4]u8", ArrayLen: 4, Elem: &TypeRef{Kind: TypePrimitive, Name: "u8", Raw: "u8", Primitive: PrimitiveInfo{Go: "uint8", Zig: "u8"}}}}, {Name: "Digest", Type: TypeRef{Kind: TypeArray, Raw: "[8]u8", ArrayLen: 8, Elem: &TypeRef{Kind: TypePrimitive, Name: "u8", Raw: "u8", Primitive: PrimitiveInfo{Go: "uint8", Zig: "u8"}}}}},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("New() error = nil, want duplicate array alias error")
+	}
+}
+
+func TestNewResolvesArrayAliasInFunctions(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		nil,
+		nil,
+		nil,
+		[]*ArrayAlias{{Name: "Digest", Type: TypeRef{Kind: TypeArray, Raw: "[4]u8", ArrayLen: 4, Elem: &TypeRef{Kind: TypePrimitive, Name: "u8", Raw: "u8", Primitive: PrimitiveInfo{Go: "uint8", Zig: "u8"}}}}},
+		[]*Function{{Name: "digest_name", Return: TypeRef{Kind: TypeStruct, Name: "Digest", Raw: "Digest"}}},
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := api.Funcs[0].Return.Kind; got != TypeArray {
+		t.Fatalf("digest_name return kind = %v, want array", got)
+	}
+	if got := api.Funcs[0].Return.Alias; got != "Digest" {
+		t.Fatalf("digest_name return alias = %q, want Digest", got)
+	}
+}
+
+func TestTypeNeedsKeepAliveForNestedSliceFields(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		[]*Struct{{Name: "Bucket", Fields: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}}},
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.TypeNeedsKeepAlive(TypeRef{Kind: TypeStruct, Name: "Bucket", Raw: "Bucket"}) {
+		t.Fatal("Bucket should require keepalive because it contains a slice field")
+	}
+}
+
+func TestNewRejectsDynamicLeafSliceAliases(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(nil, nil, []*Slice{{Name: "StringList", Elem: TypeRef{Kind: TypeString, Raw: "String", Name: "String"}}}, nil, nil)
+	if err == nil {
+		t.Fatal("New() error = nil, want unsupported String slice error")
+	}
+	_, err = New(nil, nil, []*Slice{{Name: "BytesList", Elem: TypeRef{Kind: TypeBytes, Raw: "Bytes", Name: "Bytes"}}}, nil, nil)
+	if err == nil {
+		t.Fatal("New() error = nil, want unsupported Bytes slice error")
+	}
+}
+
+func TestStructSliceElemSupportMatrix(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(
+		[]*Struct{
+			{Name: "Bucket", Fields: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}},
+			{Name: "Nested", Fields: []Field{{Name: "groups", Type: TypeRef{Kind: TypeStruct, Name: "NestedList", Raw: "NestedList"}}}},
+		},
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}, {Name: "NestedList", Elem: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.SupportsSliceElem(TypeRef{Kind: TypeStruct, Name: "Nested", Raw: "Nested"}) {
+		t.Fatal("Nested should be allowed as slice element when its slice field element is POD")
+	}
+
+	api, err = New(
+		[]*Struct{{Name: "Bucket", Fields: []Field{{Name: "scores", Type: TypeRef{Kind: TypeStruct, Name: "ScoreList", Raw: "ScoreList"}}}}},
+		nil,
+		[]*Slice{{Name: "ScoreList", Elem: TypeRef{Kind: TypePrimitive, Name: "u16", Raw: "u16", Primitive: PrimitiveInfo{Go: "uint16", Zig: "u16"}}}, {Name: "BucketList", Elem: TypeRef{Kind: TypeStruct, Name: "Bucket", Raw: "Bucket"}}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.SupportsSliceElem(TypeRef{Kind: TypeStruct, Name: "Bucket", Raw: "Bucket"}) {
+		t.Fatal("Bucket should be allowed as slice element when its slice field element is POD")
 	}
 }

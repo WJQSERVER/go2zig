@@ -55,7 +55,7 @@ func Generate(cfg GenerateConfig) error {
 		return fmt.Errorf("write generated go file: %w", err)
 	}
 	if cfg.RuntimeZig != "" {
-		if err := os.WriteFile(cfg.RuntimeZig, generator.RenderZigRuntime(genCfg), 0o644); err != nil {
+		if err := os.WriteFile(cfg.RuntimeZig, generator.RenderZigRuntime(api, genCfg), 0o644); err != nil {
 			return fmt.Errorf("write runtime zig file: %w", err)
 		}
 	}
