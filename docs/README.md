@@ -88,6 +88,7 @@
 
 ## 相关文档
 
+### 中文文档
 - [英文 README](../README.md)
 - [中文 README](../README_zh.md)
 - [架构概览](architecture.md)
@@ -96,3 +97,11 @@
 - [运行时设计](runtime.md)
 - [测试与基准](testing.md)
 - [CI 配置](ci.md)
+
+### English Documentation
+- [Architecture Overview](architecture.en.md)
+- [Usage Guide](usage.en.md)
+- [Generator Guide](generator.en.md)
+- [Runtime Design](runtime.en.md)
+- [Testing & Benchmarks](testing.en.md)
+- [CI Guide](ci.en.md)
