@@ -291,7 +291,7 @@ func TestGenerateWritesGoFile(t *testing.T) {
 	}
 	text := string(content)
 	checks := []string{
-		"//go:build amd64 && (windows || linux)",
+		"//go:build (amd64 || arm64) && (windows || linux)",
 		"package sample",
 		"type Go2ZigClient struct",
 		"type UserKind uint8",
@@ -373,6 +373,33 @@ func TestGenerateRejectsUnsupportedStringSliceAlias(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported element type") {
 		t.Fatalf("Generate() error = %q, want unsupported element type message", err)
+	}
+}
+
+func TestGenerateRejectsOutputExcludedByCurrentBuildTag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, "pub extern fn health() bool;")
+	writeFile(t, outPath, "//go:build windows && amd64\n\npackage sample\n")
+
+	err := Generate(GenerateConfig{API: apiPath, Output: outPath, PackageName: "sample", LibraryName: "sample"})
+	if runtime.GOOS == "windows" && runtime.GOARCH == "amd64" {
+		if err != nil {
+			t.Fatalf("Generate() error = %v, want nil on matching target", err)
+		}
+		return
+	}
+	if err == nil {
+		t.Fatal("Generate() error = nil, want build tag exclusion error")
+	}
+	if !strings.Contains(err.Error(), "excluded on") {
+		t.Fatalf("Generate() error = %q, want excluded-on message", err)
+	}
+	if !strings.Contains(err.Error(), outPath) {
+		t.Fatalf("Generate() error = %q, want output path in message", err)
 	}
 }
 

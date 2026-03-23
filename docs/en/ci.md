@@ -13,6 +13,7 @@ Windows job:
 - Generate `examples/basic`
 - Run `go test ./...`
 - Run `go test -bench . ./asmcall`
+- Run PowerShell cross-build: `$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./...`
 
 Linux job:
 
@@ -20,6 +21,7 @@ Linux job:
 - Generate `examples/basic`
 - Run `go test ./...`
 - Run `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...`
+- Run `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...`
 
 ## Why Linux Runtime Live Testing is Disabled by Default
 

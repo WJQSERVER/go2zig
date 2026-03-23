@@ -12,10 +12,11 @@ Languages: [English](README.md) | [简体中文](../zh/README.md) | [日本語](
 
 Currently supported:
 - `windows/amd64` - Full support with CI testing
+- `windows/arm64` - Supported by the no-cgo asm runtime
 - `linux/amd64` - Full support with CI testing
+- `linux/arm64` - Supported by the no-cgo asm runtime
 
 Unsupported:
-- `arm64` - Planned for future implementation
 - `macOS` - Not currently supported
 - Other architectures - Not currently supported
 
@@ -66,7 +67,7 @@ The current implementation uses a fixed memory management pattern:
 
 ## Current Limitations
 
-1. **Platform limitation**: Only supports amd64 on Windows and Linux
+1. **Platform limitation**: Only supports Windows/Linux on `amd64` and `arm64`
 2. **Type limitation**: Does not support Go-specific types like maps, channels, and interfaces
 3. **Memory management**: Uses a fixed allocation pattern and does not support custom allocators
 4. **Performance overhead**: Requires data copying for each call
@@ -74,7 +75,6 @@ The current implementation uses a fixed memory management pattern:
 ## Future Directions
 
 ### High Priority
-- arm64 architecture support
 - Support for `?String` and `?Bytes` optionals
 - Improved error diagnostics
 

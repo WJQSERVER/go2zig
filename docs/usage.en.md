@@ -8,10 +8,11 @@ This document explains the typical usage of `go2zig` in a "from zero to running"
 
 Currently supported platforms:
 - **Windows/amd64** - Full support
+- **Windows/arm64** - Supported by the no-cgo asm runtime
 - **Linux/amd64** - Full support
+- **Linux/arm64** - Supported by the no-cgo asm runtime
 
 Unsupported platforms:
-- arm64 architecture
 - macOS
 - Other operating systems
 
@@ -299,7 +300,7 @@ Recommended order:
 ### Q5: Why are some types not supported?
 
 Current design limitations:
-- **Platform limitation**: Only supports amd64 architecture
+- **Platform limitation**: Only supports `amd64` and `arm64`
 - **Type limitation**: To maintain ABI stability and performance, dynamic types are not supported
 - **Memory management**: Fixed allocation pattern, cannot be customized
 
@@ -325,7 +326,7 @@ Currently no built-in verbose logging, but you can:
 
 1. **Type not supported**: Check if unsupported types are used
 2. **Syntax error**: Ensure correct Zig syntax is used
-3. **Platform not supported**: Ensure running on Windows/amd64 or Linux/amd64
+3. **Platform not supported**: Ensure running on Windows/Linux with `amd64` or `arm64`
 
 ## 12. Best Practices
 

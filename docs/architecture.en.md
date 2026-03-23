@@ -191,7 +191,9 @@ Return value side uses:
 ## Currently Supported Platforms
 
 - `windows/amd64`
+- `windows/arm64`
 - `linux/amd64`
+- `linux/arm64`
 
 Where:
 - Windows path has entered main CI for live testing
@@ -206,13 +208,12 @@ Where:
 
 ### Disadvantages
 - Data copying required for each call
-- Only supports amd64 architecture
+- Only supports `amd64` / `arm64`
 - Limited type support
 
 ## Extension Points
 
 ### Short-term Extensions
-- arm64 architecture support
 - Support `?String` and `?Bytes` optional types
 - Improved error diagnostics
 

@@ -8,10 +8,11 @@
 
 当前支持的平台：
 - **Windows/amd64** - 完全支持
+- **Windows/arm64** - 无 cgo 汇编运行时已支持
 - **Linux/amd64** - 完全支持
+- **Linux/arm64** - 无 cgo 汇编运行时已支持
 
 不支持的平台：
-- arm64 架构
 - macOS
 - 其他操作系统
 
@@ -299,7 +300,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 ### Q5: 为什么有些类型不支持？
 
 当前设计限制：
-- **平台限制**：仅支持 amd64 架构
+- **平台限制**：仅支持 `amd64` 和 `arm64`
 - **类型限制**：为了保持 ABI 稳定性和性能，不支持动态类型
 - **内存管理**：固定分配模式，无法自定义
 
@@ -325,7 +326,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 
 1. **类型不支持**：检查是否使用了不支持的类型
 2. **语法错误**：确保使用了正确的 Zig 语法
-3. **平台不支持**：确保在 Windows/amd64 或 Linux/amd64 上运行
+3. **平台不支持**：确保在 Windows/Linux 的 `amd64` 或 `arm64` 上运行
 
 ## 12. 最佳实践
 

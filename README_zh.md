@@ -16,10 +16,11 @@
 
 ### 支持的平台
 - ✅ **Windows/amd64** - 完全支持，包含 CI 测试
+- ✅ **Windows/arm64** - 无 cgo 汇编运行时已支持
 - ✅ **Linux/amd64** - 完全支持，包含 CI 测试
+- ✅ **Linux/arm64** - 无 cgo 汇编运行时已支持
 
 ### 不支持的平台
-- ❌ **arm64** - 计划未来实现
 - ❌ **macOS** - 当前不支持
 - ❌ **其他架构** - 当前不支持
 
@@ -27,7 +28,7 @@
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **平台**：Windows 或 Linux（仅 amd64）
+- **平台**：Windows 或 Linux（支持 `amd64` 和 `arm64`）
 
 ## 支持的类型
 
@@ -216,7 +217,7 @@ err := go2zig.NewBuilder().
 
 ## 限制
 
-1. **平台**：仅支持 amd64 架构（Windows/Linux）
+1. **平台**：仅支持 Windows/Linux 上的 `amd64` 与 `arm64`
 2. **类型**：不支持 Go 的 map、channel、interface
 3. **内存**：固定分配模式（Zig 分配，Go 释放）
 4. **性能**：每次调用需要数据复制
@@ -225,7 +226,6 @@ err := go2zig.NewBuilder().
 ## 未来路线图
 
 ### 短期
-- arm64 架构支持
 - 支持 `?String` 和 `?Bytes` 可选类型
 - 更好的错误诊断
 
