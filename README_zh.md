@@ -12,6 +12,15 @@
 - **Builder 模式** - 一步生成 Go 包装并编译 Zig 动态库
 - **双 API 风格** - 同时支持 `Client` 方法和顶层函数，使用更灵活
 
+## 平台分级
+
+参考 `purego` 的支持分级思路，`go2zig` 当前将平台支持划分为：
+
+- **Tier 1** - CI 主验证目标：`windows/amd64`、`linux/amd64`
+- **Tier 2** - 已支持交叉构建或新接入的平台：`windows/arm64`、`linux/arm64`、`darwin/arm64`
+
+Tier 2 平台按 best-effort 方式支持，默认保证构建和生成包装可用；运行时边界行为仍可能需要额外的平台专项加固。
+
 ## 平台支持
 
 ### 支持的平台

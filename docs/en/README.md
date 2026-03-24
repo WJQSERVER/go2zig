@@ -21,6 +21,15 @@ Unsupported:
 - `darwin/amd64` - Not currently supported
 - Other architectures - Not currently supported
 
+## Platform Tiers
+
+Following the support-tier idea used by `purego`:
+
+- **Tier 1** - CI-verified primary targets: `windows/amd64`, `linux/amd64`
+- **Tier 2** - Cross-build supported or newly enabled targets: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+
+Tier 2 targets are supported on a best-effort basis. Buildability and generated wrapper support come first, while runtime stability is tightened progressively through targeted platform work.
+
 ## Type Support Overview
 
 ### Fully Supported Types

@@ -12,6 +12,15 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 - **Builder パターン** - Go ラッパーの生成と Zig 動的ライブラリのビルドを 1 ステップで行えます
 - **デュアル API スタイル** - `Client` メソッドとトップレベル関数の両方を提供し、柔軟に利用できます
 
+## Platform Tiers
+
+`purego` のサポート階層の考え方を参考にして、`go2zig` では現在のプラットフォーム対応を次のように扱います。
+
+- **Tier 1** - CI で主に検証している主要ターゲット: `windows/amd64`, `linux/amd64`
+- **Tier 2** - クロスビルド対応済み、または新たに有効化したターゲット: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+
+Tier 2 は best-effort サポートです。ビルドと生成ラッパーの利用は前提としつつ、ランタイムの細かな挙動については追加のプラットフォーム固有対応が必要になる場合があります。
+
 ## Platform Support
 
 ### Supported Platforms

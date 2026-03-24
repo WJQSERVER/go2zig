@@ -27,12 +27,20 @@ type Library struct {
 	paths  [][]byte
 }
 
+const (
+	RTLDDefault = ^uintptr(1)
+	RTLDLazy    = 0x1
+	RTLDNow     = 0x2
+	RTLDLocal   = 0x4
+	RTLDGlobal  = 0x8
+)
+
 func Load(path string) (*Library, error) {
 	if libsystem_dlopen == 0 {
 		return nil, fmt.Errorf("darwin dynamic loader symbols are unavailable")
 	}
 	pathBytes := append([]byte(path), 0)
-	handle := libSystemOpen(pathBytes, rtldLazy|rtldLocal)
+	handle := libSystemOpen(pathBytes, RTLDLazy|RTLDLocal)
 	if handle == 0 {
 		return nil, fmt.Errorf("dlopen %s failed", path)
 	}

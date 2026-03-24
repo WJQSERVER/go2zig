@@ -21,6 +21,15 @@ Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](
 - `darwin/amd64` - 当前不支持
 - 其他架构 - 当前不支持
 
+## 平台分级
+
+参考 `purego` 的支持分级思路：
+
+- **Tier 1** - CI 主验证平台：`windows/amd64`、`linux/amd64`
+- **Tier 2** - 已支持交叉构建或新启用平台：`windows/arm64`、`linux/arm64`、`darwin/arm64`
+
+Tier 2 平台按 best-effort 模式支持，构建和生成包装优先，运行时稳定性通过后续专项测试逐步强化。
+
 ## 类型支持概览
 
 ### 完全支持的类型

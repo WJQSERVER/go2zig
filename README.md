@@ -12,6 +12,15 @@ A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [r
 - **Builder pattern** - Generate Go wrappers and compile Zig dynamic libraries in one step
 - **Dual API style** - Both `Client` methods and top-level functions for flexible usage
 
+## Platform Tiers
+
+Borrowing the idea of support tiers from `purego`, `go2zig` currently treats platform support like this:
+
+- **Tier 1** - CI-tested primary targets: `windows/amd64`, `linux/amd64`
+- **Tier 2** - Cross-build supported or newly enabled targets: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+
+Tier 2 targets are supported on a best-effort basis. Build and generated wrapper support are expected, while runtime edge cases may still need extra platform-specific hardening.
+
 ## Platform Support
 
 ### Supported Platforms
