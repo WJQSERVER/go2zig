@@ -28,8 +28,8 @@ jobs:
             goarch: arm64
             run_tests: true
             run_bench: true
-            test_cmd: "go test ./..."
-            bench_cmd: "$env:GODEBUG='invalidptr=0,cgocheck=0'; go test -run ^$ -bench . ./..."
+            test_cmd: "$env:CGO_ENABLED='0'; go test ./..."
+            bench_cmd: "$env:CGO_ENABLED='0'; $env:GODEBUG='invalidptr=0,cgocheck=0'; go test -run ^$ -bench . ./..."
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./..."
           - os: ubuntu-latest
             goos: linux
