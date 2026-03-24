@@ -5,6 +5,7 @@ package main
 import "testing"
 
 func TestExampleAPI(t *testing.T) {
+	prepareExampleRuntime(t)
 	if err := Default.Load(); err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

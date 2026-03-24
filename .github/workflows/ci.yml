@@ -20,30 +20,40 @@ jobs:
             goarch: amd64
             run_tests: true
             run_bench: true
+            test_cmd: "go test ./..."
+            bench_cmd: "go test -run ^$ -bench . ./..."
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'; go build ./..."
-          - os: windows-latest
+          - os: windows-11-arm
             goos: windows
             goarch: arm64
-            run_tests: false
-            run_bench: false
+            run_tests: true
+            run_bench: true
+            test_cmd: "go test ./..."
+            bench_cmd: "go test -run ^$ -bench . ./..."
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./..."
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
             run_tests: true
             run_bench: true
+            test_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./..."
+            bench_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./..."
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
-            run_tests: false
-            run_bench: false
+            run_tests: true
+            run_bench: true
+            test_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./..."
+            bench_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./..."
           - os: macos-latest
             goos: darwin
             goarch: arm64
             run_tests: true
-            run_bench: false
+            run_bench: true
+            test_cmd: "go test ./..."
+            bench_cmd: "go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./..."
     name: ${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ${{ matrix.os }}
@@ -60,9 +70,9 @@ jobs:
         run: go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
       - name: Run tests
         if: ${{ matrix.run_tests }}
-        run: go test ./...
-      - name: Run asm benchmarks
+        run: ${{ matrix.test_cmd }}
+      - name: Run benchmarks
         if: ${{ matrix.run_bench }}
-        run: go test -bench . ./asmcall
+        run: ${{ matrix.bench_cmd }}
       - name: Cross-check build
         run: ${{ matrix.build_cmd }}

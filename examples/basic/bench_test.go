@@ -12,6 +12,7 @@ var loadOnce sync.Once
 func ensureLoaded(b testing.TB) {
 	b.Helper()
 	loadOnce.Do(func() {
+		prepareExampleRuntime(b)
 		if err := Default.Load(); err != nil {
 			b.Fatalf("Load() error = %v", err)
 		}
