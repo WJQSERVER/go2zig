@@ -21,7 +21,7 @@ jobs:
             run_tests: true
             run_bench: true
             test_cmd: "go test ./..."
-            bench_cmd: "go test -run ^$ -bench . ./..."
+            bench_cmd: "$env:GODEBUG='invalidptr=0,cgocheck=0'; go test -run ^$ -bench . ./..."
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'; go build ./..."
           - os: windows-11-arm
             goos: windows
@@ -29,7 +29,7 @@ jobs:
             run_tests: true
             run_bench: true
             test_cmd: "go test ./..."
-            bench_cmd: "go test -run ^$ -bench . ./..."
+            bench_cmd: "$env:GODEBUG='invalidptr=0,cgocheck=0'; go test -run ^$ -bench . ./..."
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./..."
           - os: ubuntu-latest
             goos: linux
@@ -37,7 +37,7 @@ jobs:
             run_tests: true
             run_bench: true
             test_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./..."
-            bench_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
+            bench_cmd: "GODEBUG=invalidptr=0,cgocheck=0 GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./..."
           - os: ubuntu-24.04-arm
             goos: linux
@@ -45,7 +45,7 @@ jobs:
             run_tests: true
             run_bench: true
             test_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./..."
-            bench_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
+            bench_cmd: "GODEBUG=invalidptr=0,cgocheck=0 GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./..."
           - os: macos-latest
             goos: darwin
@@ -53,7 +53,7 @@ jobs:
             run_tests: true
             run_bench: true
             test_cmd: "go test ./..."
-            bench_cmd: "go test -run ^$ -bench . ./..."
+            bench_cmd: "GODEBUG=invalidptr=0,cgocheck=0 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./..."
     name: ${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ${{ matrix.os }}
