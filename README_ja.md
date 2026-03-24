@@ -124,6 +124,9 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib mylib -no-build
 
 # Generate and build dynamic library
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib
+
+# Generate without top-level forwarding functions
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib -no-top-level
 ```
 
 ### 3. Use in Go
@@ -202,6 +205,21 @@ err := go2zig.NewBuilder().
     WithLibraryName("mylib").
     Build()
 ```
+
+プロジェクト側ですでに独自の高レベルラッパーを持っていて、`Login(...)` のようなパッケージレベルの転送関数を生成したくない場合は、明示的に無効化できます。
+
+```go
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("mylib").
+    WithTopLevelFunctions(false).
+    Build()
+```
+
+この場合でも `Go2ZigClient` のメソッド、たとえば `client.Login(...)` は残りますが、トップレベルの転送関数は生成されません。手書きのラッパー層との名前衝突を避けたい場合に有効です。
 
 ## Examples
 

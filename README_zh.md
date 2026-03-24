@@ -124,6 +124,9 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib mylib -no-build
 
 # 生成并构建动态库
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib
+
+# 生成时禁用顶层转发函数
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib -no-top-level
 ```
 
 ### 3. 在 Go 中使用
@@ -202,6 +205,21 @@ err := go2zig.NewBuilder().
     WithLibraryName("mylib").
     Build()
 ```
+
+如果你的项目已经手写了一层更高层的包装，并且希望避免生成 `Login(...)` 这类包级顶层转发函数，可以显式关闭：
+
+```go
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("mylib").
+    WithTopLevelFunctions(false).
+    Build()
+```
+
+这样仍会保留 `Go2ZigClient` 方法，例如 `client.Login(...)`，但不会生成顶层转发函数，从而降低与手写包装层发生重名冲突的概率。
 
 ## 示例
 

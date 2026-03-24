@@ -14,15 +14,16 @@ import (
 )
 
 type GenerateConfig struct {
-	API          string
-	Output       string
-	PackageName  string
-	LibraryName  string
-	RuntimeZig   string
-	BridgeZig    string
-	APIModule    string
-	ImplModule   string
-	DynamicBuild bool
+	API             string
+	Output          string
+	PackageName     string
+	LibraryName     string
+	RuntimeZig      string
+	BridgeZig       string
+	APIModule       string
+	ImplModule      string
+	DynamicBuild    bool
+	DisableTopLevel bool
 }
 
 func Generate(cfg GenerateConfig) error {
@@ -43,10 +44,11 @@ func Generate(cfg GenerateConfig) error {
 		cfg.LibraryName = generator.LibraryNameFromPath(cfg.Output)
 	}
 	genCfg := generator.Config{
-		PackageName: cfg.PackageName,
-		LibraryName: cfg.LibraryName,
-		APIModule:   defaultString(cfg.APIModule, "api.zig"),
-		ImplModule:  defaultString(cfg.ImplModule, "lib.zig"),
+		PackageName:     cfg.PackageName,
+		LibraryName:     cfg.LibraryName,
+		APIModule:       defaultString(cfg.APIModule, "api.zig"),
+		ImplModule:      defaultString(cfg.ImplModule, "lib.zig"),
+		DisableTopLevel: cfg.DisableTopLevel,
 	}
 	content, err := generator.Render(api, genCfg)
 	if err != nil {
@@ -187,18 +189,19 @@ func isWithinDir(base, target string) bool {
 }
 
 type Builder struct {
-	apiPath       string
-	zigPath       string
-	outputPath    string
-	packageName   string
-	libraryName   string
-	optimize      string
-	headerPath    string
-	runtimeZig    string
-	bridgeZig     string
-	dynamicBuild  bool
-	apiModuleName string
-	implModule    string
+	apiPath         string
+	zigPath         string
+	outputPath      string
+	packageName     string
+	libraryName     string
+	optimize        string
+	headerPath      string
+	runtimeZig      string
+	bridgeZig       string
+	dynamicBuild    bool
+	apiModuleName   string
+	implModule      string
+	disableTopLevel bool
 }
 
 func NewBuilder() *Builder {
@@ -252,6 +255,11 @@ func (b *Builder) WithBridgeZig(path string) *Builder {
 
 func (b *Builder) WithDynamicBuild(enabled bool) *Builder {
 	b.dynamicBuild = enabled
+	return b
+}
+
+func (b *Builder) WithTopLevelFunctions(enabled bool) *Builder {
+	b.disableTopLevel = !enabled
 	return b
 }
 
@@ -340,15 +348,16 @@ func (b *Builder) Build() error {
 	}
 
 	if err := Generate(GenerateConfig{
-		API:          apiPath,
-		Output:       outputAbs,
-		PackageName:  b.packageName,
-		LibraryName:  libraryName,
-		RuntimeZig:   runtimeZigAbs,
-		BridgeZig:    bridgeZigAbs,
-		APIModule:    apiModule,
-		ImplModule:   implModule,
-		DynamicBuild: b.dynamicBuild,
+		API:             apiPath,
+		Output:          outputAbs,
+		PackageName:     b.packageName,
+		LibraryName:     libraryName,
+		RuntimeZig:      runtimeZigAbs,
+		BridgeZig:       bridgeZigAbs,
+		APIModule:       apiModule,
+		ImplModule:      implModule,
+		DynamicBuild:    b.dynamicBuild,
+		DisableTopLevel: b.disableTopLevel,
 	}); err != nil {
 		return err
 	}

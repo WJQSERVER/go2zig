@@ -164,6 +164,34 @@ func TestRender(t *testing.T) {
 	}
 }
 
+func TestRenderDisableTopLevel(t *testing.T) {
+	t.Parallel()
+
+	api, err := parser.Parse(`
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        pub extern fn health() bool;
+        pub extern fn login(name: String) String;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	out, err := Render(api, Config{PackageName: "basic", LibraryName: "basic", APIModule: "api.zig", ImplModule: "lib.zig", DisableTopLevel: true})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	content := string(out)
+	if !strings.Contains(content, "func (c *Go2ZigClient) Health() bool") {
+		t.Fatalf("Render() missing client method\n%s", content)
+	}
+	if strings.Contains(content, "func Health() bool") {
+		t.Fatalf("Render() should not emit top-level forwarders when disabled\n%s", content)
+	}
+	if strings.Contains(content, "func Login(name string) string") {
+		t.Fatalf("Render() should not emit top-level Login when disabled\n%s", content)
+	}
+}
+
 func TestRenderVoidErrorFunction(t *testing.T) {
 	t.Parallel()
 

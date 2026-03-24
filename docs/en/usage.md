@@ -132,6 +132,14 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib basic -no-build
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic
 ```
 
+### Generate Without Top-Level Forwarders
+
+If you want to keep only `Go2ZigClient` methods and skip package-level forwarding functions like `Login(...)`, use:
+
+```bash
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic -no-top-level
+```
+
 ### Generated Files
 
 By default, the following are produced:
@@ -189,6 +197,8 @@ func main() {
 - Top-level functions: `Login(...)`
 - Client methods: `Default.Login(...)` or `NewGo2ZigClient(path)`
 
+If `-no-top-level` is enabled, only client methods are generated.
+
 ### Type Mapping
 
 For supported types:
@@ -241,6 +251,7 @@ If you call the generator directly in Go code, the most commonly used are:
 - `WithPackageName(name)`
 - `WithLibraryName(name)`
 - `WithOptimize(mode)`
+- `WithTopLevelFunctions(enabled)`
 - `Build()`
 
 Typical usage:
@@ -254,6 +265,21 @@ err := go2zig.NewBuilder().
     WithOutput("./gen.go").
     WithPackageName("main").
     WithLibraryName("basic").
+    Build()
+```
+
+If your project already has a hand-written wrapper layer, you can also disable top-level forwarding functions in the Builder:
+
+```go
+import "go2zig"
+
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("basic").
+    WithTopLevelFunctions(false).
     Build()
 ```
 

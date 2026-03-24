@@ -124,6 +124,9 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib mylib -no-build
 
 # Generate and build dynamic library
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib
+
+# Generate without top-level forwarding functions
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib -no-top-level
 ```
 
 ### 3. Use in Go
@@ -202,6 +205,21 @@ err := go2zig.NewBuilder().
     WithLibraryName("mylib").
     Build()
 ```
+
+If your project already provides its own higher-level wrapper layer and you want to avoid generated package-level forwarding functions like `Login(...)`, disable them explicitly:
+
+```go
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("mylib").
+    WithTopLevelFunctions(false).
+    Build()
+```
+
+This keeps `Go2ZigClient` methods such as `client.Login(...)`, but skips top-level forwarding functions and helps avoid symbol collisions with hand-written wrappers.
 
 ## Examples
 

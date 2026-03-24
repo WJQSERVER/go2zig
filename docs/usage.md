@@ -132,6 +132,14 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib basic -no-build
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic
 ```
 
+### 禁用顶层转发函数生成
+
+如果你只想保留 `Go2ZigClient` 方法，而不希望生成 `Login(...)` 这类包级顶层转发函数，可以这样做：
+
+```bash
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic -no-top-level
+```
+
 ### 生成的文件
 
 默认会产出：
@@ -189,6 +197,8 @@ func main() {
 - 顶层函数：`Login(...)`
 - client 方法：`Default.Login(...)` 或 `NewGo2ZigClient(path)`
 
+如果启用了 `-no-top-level`，则只会保留 client 方法，不再生成顶层函数。
+
 ### 类型映射
 
 对于支持的类型：
@@ -241,6 +251,7 @@ func Flush() error
 - `WithPackageName(name)`
 - `WithLibraryName(name)`
 - `WithOptimize(mode)`
+- `WithTopLevelFunctions(enabled)`
 - `Build()`
 
 典型写法：
@@ -254,6 +265,21 @@ err := go2zig.NewBuilder().
     WithOutput("./gen.go").
     WithPackageName("main").
     WithLibraryName("basic").
+    Build()
+```
+
+如果项目已经手写了一层更高层的包装，也可以在 Builder 中关闭顶层函数生成：
+
+```go
+import "go2zig"
+
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("basic").
+    WithTopLevelFunctions(false).
     Build()
 ```
 

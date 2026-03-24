@@ -410,6 +410,45 @@ func TestGenerateRejectsOutputExcludedByCurrentBuildTag(t *testing.T) {
 	}
 }
 
+func TestBuilderDisablesTopLevelFunctions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, `
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        pub extern fn health() bool;
+        pub extern fn login(name: String) String;
+    `)
+
+	err := NewBuilder().
+		WithAPI(apiPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		WithTopLevelFunctions(false).
+		Build()
+	if err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile(gen.go) error = %v", err)
+	}
+	text := string(content)
+	if !strings.Contains(text, "func (c *Go2ZigClient) Health() bool") {
+		t.Fatalf("generated file missing client method\n%s", text)
+	}
+	if strings.Contains(text, "func Health() bool") {
+		t.Fatalf("generated file should not contain top-level Health\n%s", text)
+	}
+	if strings.Contains(text, "func Login(name string) string") {
+		t.Fatalf("generated file should not contain top-level Login\n%s", text)
+	}
+}
+
 func TestBuilderBuildsZigDynamicLibrary(t *testing.T) {
 	zigPath, err := exec.LookPath("zig")
 	if err != nil {
