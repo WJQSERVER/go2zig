@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && !amd64
 
 package dynlib
 
@@ -17,12 +17,6 @@ import (
 var libdl_dlopen uintptr
 var libdl_dlsym uintptr
 var libdl_dlclose uintptr
-
-const (
-	rtldLazy   = 0x00001
-	rtldLocal  = 0
-	rtldNoLoad = 0x00004
-)
 
 type Library struct {
 	handle uintptr

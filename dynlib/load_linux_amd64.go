@@ -1,4 +1,4 @@
-//go:build darwin && arm64
+//go:build linux && amd64
 
 package dynlib
 
@@ -14,16 +14,16 @@ type Library struct {
 }
 
 const (
-	RTLDDefault = ^uintptr(1)
-	RTLDLazy    = 0x1
-	RTLDNow     = 0x2
-	RTLDLocal   = 0x4
-	RTLDGlobal  = 0x8
+	RTLDDefault = 0x00000
+	RTLDLazy    = 0x00001
+	RTLDNow     = 0x00002
+	RTLDLocal   = 0x00000
+	RTLDGlobal  = 0x00100
 )
 
 func Load(path string) (*Library, error) {
 	if !rtld.Available() {
-		return nil, fmt.Errorf("darwin dynamic loader symbols are unavailable")
+		return nil, fmt.Errorf("linux dynamic loader symbols are unavailable")
 	}
 	pathBytes := append([]byte(path), 0)
 	handle, err := rtld.Dlopen(path, int(RTLDLazy|RTLDLocal))
