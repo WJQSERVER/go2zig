@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && !amd64 && !arm64
 
 package dynlib
 
@@ -18,20 +18,22 @@ var libdl_dlopen uintptr
 var libdl_dlsym uintptr
 var libdl_dlclose uintptr
 
-const (
-	rtldLazy   = 0x00001
-	rtldLocal  = 0
-	rtldNoLoad = 0x00004
-)
-
 type Library struct {
 	handle uintptr
 	paths  [][]byte
 }
 
+const (
+	RTLDDefault = 0x00000
+	RTLDLazy    = 0x00001
+	RTLDNow     = 0x00002
+	RTLDLocal   = 0x00000
+	RTLDGlobal  = 0x00100
+)
+
 func Load(path string) (*Library, error) {
 	pathBytes := append([]byte(path), 0)
-	handle := libdlOpen(pathBytes, rtldLazy|rtldLocal)
+	handle := libdlOpen(pathBytes, RTLDLazy|RTLDLocal)
 	if handle == 0 {
 		return nil, fmt.Errorf("dlopen %s failed", path)
 	}

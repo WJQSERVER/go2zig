@@ -256,6 +256,10 @@ func parseType(raw string) (model.TypeRef, error) {
 		return model.TypeRef{Kind: model.TypeString, Raw: raw, Name: base}, nil
 	case "Bytes":
 		return model.TypeRef{Kind: model.TypeBytes, Raw: raw, Name: base}, nil
+	case "GoReader":
+		return model.TypeRef{Kind: model.TypeGoReader, Raw: raw, Name: base}, nil
+	case "GoWriter":
+		return model.TypeRef{Kind: model.TypeGoWriter, Raw: raw, Name: base}, nil
 	}
 	if prim, ok := model.Primitive(base); ok {
 		return model.TypeRef{Kind: model.TypePrimitive, Raw: raw, Name: base, Primitive: prim}, nil

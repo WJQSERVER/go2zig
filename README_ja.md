@@ -12,6 +12,24 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 - **Builder パターン** - Go ラッパーの生成と Zig 動的ライブラリのビルドを 1 ステップで行えます
 - **デュアル API スタイル** - `Client` メソッドとトップレベル関数の両方を提供し、柔軟に利用できます
 
+## Experimental Streaming
+
+`go2zig` には、`GoReader` と `GoWriter` に基づく実験的なストリーム橋接が追加されています。
+
+- Go 側の補助型は現在 `io.Reader`、`io.Writer`、`io.ReadCloser`、`io.WriteCloser`、`io.Pipe` を扱えます
+- Zig 側では `rt.streamRead(...)` と `rt.streamWrite(...)` を使って同期的な分割読み書きを行います
+- 現在の実装はブロック単位の同期ストリーム橋接であり、async や full-duplex のプロトコル層ではありません
+- ストリーム機能は `WithStreamExperimental(true)` または `-stream-experimental` で明示的に有効化する必要があります
+
+## Platform Tiers
+
+`purego` のサポート階層の考え方を参考にして、`go2zig` では現在のプラットフォーム対応を次のように扱います。
+
+- **Tier 1** - CI で主に検証している主要ターゲット: `windows/amd64`, `linux/amd64`
+- **Tier 2** - クロスビルド対応済み、または新たに有効化したターゲット: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+
+Tier 2 は best-effort サポートです。ビルドと生成ラッパーの利用は前提としつつ、ランタイムの細かな挙動については追加のプラットフォーム固有対応が必要になる場合があります。
+
 ## Platform Support
 
 ### Supported Platforms
@@ -19,16 +37,17 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 - ✅ **Windows/arm64** - no-cgo asm ランタイムでサポート
 - ✅ **Linux/amd64** - CI テストを含む完全サポート
 - ✅ **Linux/arm64** - no-cgo asm ランタイムでサポート
+- ✅ **Darwin/arm64** - 動的ロードと生成ラッパーに対応
 
 ### Unsupported Platforms
-- ❌ **macOS** - 現在は未サポート
+- ❌ **Darwin/amd64** - 現在は未サポート
 - ❌ **Other architectures** - 現在は未サポート
 
 ## Requirements
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **Platform**: Windows または Linux（`amd64` と `arm64` をサポート）
+- **Platform**: Windows/Linux（`amd64` と `arm64`）および Darwin（`arm64` のみ）
 
 ## Supported Types
 
@@ -114,6 +133,9 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib mylib -no-build
 
 # Generate and build dynamic library
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib
+
+# Generate without top-level forwarding functions
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib -no-top-level
 ```
 
 ### 3. Use in Go
@@ -193,6 +215,21 @@ err := go2zig.NewBuilder().
     Build()
 ```
 
+プロジェクト側ですでに独自の高レベルラッパーを持っていて、`Login(...)` のようなパッケージレベルの転送関数を生成したくない場合は、明示的に無効化できます。
+
+```go
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("mylib").
+    WithTopLevelFunctions(false).
+    Build()
+```
+
+この場合でも `Go2ZigClient` のメソッド、たとえば `client.Login(...)` は残りますが、トップレベルの転送関数は生成されません。手書きのラッパー層との名前衝突を避けたい場合に有効です。
+
 ## Examples
 
 完全な動作例については `examples/basic/` を参照してください。以下の内容を実演しています。
@@ -218,7 +255,7 @@ err := go2zig.NewBuilder().
 
 ## Limitations
 
-1. **Platform**: 対応するのは Windows/Linux 上の `amd64` と `arm64` のみ
+1. **Platform**: 対応するのは Windows/Linux 上の `amd64` と `arm64`、および Darwin 上の `arm64` のみ
 2. **Types**: Go の maps、channels、interfaces は未サポート
 3. **Memory**: 固定のメモリ管理方式（Zig が確保し、Go が解放）
 4. **Performance**: 各呼び出しでデータコピーが必要

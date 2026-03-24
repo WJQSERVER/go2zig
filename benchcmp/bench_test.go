@@ -1,4 +1,4 @@
-//go:build cgo && (amd64 || arm64)
+//go:build cgo && (windows || linux) && (amd64 || arm64)
 
 package benchcmp
 

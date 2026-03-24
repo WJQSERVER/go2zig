@@ -14,6 +14,8 @@ const (
 	TypePrimitive
 	TypeString
 	TypeBytes
+	TypeGoReader
+	TypeGoWriter
 	TypeStruct
 	TypeEnum
 	TypeOptional
@@ -179,11 +181,17 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias
 			if err := api.resolveType(&item.Fields[i].Type, "struct "+item.Name); err != nil {
 				return nil, err
 			}
+			if err := api.validateNoStreamType(item.Fields[i].Type, "struct "+item.Name+" field "+item.Fields[i].Name); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	for _, item := range arrays {
 		if err := api.resolveType(&item.Type, "array alias "+item.Name); err != nil {
+			return nil, err
+		}
+		if err := api.validateNoStreamType(item.Type, "array alias "+item.Name); err != nil {
 			return nil, err
 		}
 		if item.Type.Kind != TypeArray {
@@ -194,6 +202,9 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias
 
 	for _, item := range slices {
 		if err := api.resolveType(&item.Elem, "slice "+item.Name); err != nil {
+			return nil, err
+		}
+		if err := api.validateNoStreamType(item.Elem, "slice "+item.Name); err != nil {
 			return nil, err
 		}
 		if item.Elem.Kind == TypeString || item.Elem.Kind == TypeBytes {
@@ -209,6 +220,9 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias
 			if err := api.resolveType(&item.Fields[i].Type, "struct "+item.Name); err != nil {
 				return nil, err
 			}
+			if err := api.validateNoStreamType(item.Fields[i].Type, "struct "+item.Name+" field "+item.Fields[i].Name); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -217,8 +231,14 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias
 			if err := api.resolveType(&item.Params[i].Type, "function "+item.Name); err != nil {
 				return nil, err
 			}
+			if err := api.validateStreamParam(item.Params[i].Type, "function "+item.Name+" param "+item.Params[i].Name); err != nil {
+				return nil, err
+			}
 		}
 		if err := api.resolveType(&item.Return, "function "+item.Name); err != nil {
+			return nil, err
+		}
+		if err := api.validateNoStreamType(item.Return, "function "+item.Name+" return"); err != nil {
 			return nil, err
 		}
 	}
@@ -269,6 +289,23 @@ func (a *API) resolveType(t *TypeRef, owner string) error {
 	}
 }
 
+func (a *API) validateNoStreamType(t TypeRef, owner string) error {
+	if t.ContainsStream() {
+		return fmt.Errorf("%s uses unsupported stream type %q", owner, t.TypeName())
+	}
+	return nil
+}
+
+func (a *API) validateStreamParam(t TypeRef, owner string) error {
+	if t.Kind == TypeGoReader || t.Kind == TypeGoWriter {
+		return nil
+	}
+	if t.ContainsStream() {
+		return fmt.Errorf("%s uses unsupported nested stream type %q", owner, t.TypeName())
+	}
+	return nil
+}
+
 func Primitive(raw string) (PrimitiveInfo, bool) {
 	info, ok := primitiveTypes[raw]
 	return info, ok
@@ -295,6 +332,8 @@ func (t TypeRef) Clone() TypeRef {
 func (t TypeRef) TypeName() string {
 	switch t.Kind {
 	case TypeStruct, TypeEnum:
+		return t.Name
+	case TypeGoReader, TypeGoWriter:
 		return t.Name
 	case TypeOptional:
 		if t.Elem == nil {
@@ -338,6 +377,20 @@ func (t TypeRef) Key() string {
 		return fmt.Sprintf("array:%d:%s", t.ArrayLen, t.Elem.Key())
 	default:
 		return fmt.Sprintf("%d:%s", t.Kind, t.TypeName())
+	}
+}
+
+func (t TypeRef) ContainsStream() bool {
+	switch t.Kind {
+	case TypeGoReader, TypeGoWriter:
+		return true
+	case TypeOptional, TypeSlice, TypeArray:
+		if t.Elem == nil {
+			return false
+		}
+		return t.Elem.ContainsStream()
+	default:
+		return false
 	}
 }
 
@@ -521,6 +574,8 @@ func (a *API) IsPOD(t TypeRef) bool {
 			return false
 		}
 		return a.IsPOD(*t.Elem)
+	case TypeGoReader, TypeGoWriter:
+		return false
 	case TypeArray:
 		if t.Elem == nil {
 			return false

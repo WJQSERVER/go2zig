@@ -1,10 +1,11 @@
-//go:build windows && (amd64 || arm64)
+//go:build (windows && (amd64 || arm64)) || (darwin && arm64)
 
 package main
 
 import "testing"
 
 func TestExampleAPI(t *testing.T) {
+	prepareExampleRuntime(t)
 	if err := Default.Load(); err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

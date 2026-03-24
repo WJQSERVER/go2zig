@@ -15,10 +15,20 @@ Currently supported:
 - `windows/arm64` - Supported by the no-cgo asm runtime
 - `linux/amd64` - Full support with CI testing
 - `linux/arm64` - Supported by the no-cgo asm runtime
+- `darwin/arm64` - Dynamic loading and generated wrappers supported
 
 Unsupported:
-- `macOS` - Not currently supported
+- `darwin/amd64` - Not currently supported
 - Other architectures - Not currently supported
+
+## Platform Tiers
+
+Following the support-tier idea used by `purego`:
+
+- **Tier 1** - CI-verified primary targets: `windows/amd64`, `linux/amd64`
+- **Tier 2** - Cross-build supported or newly enabled targets: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+
+Tier 2 targets are supported on a best-effort basis. Buildability and generated wrapper support come first, while runtime stability is tightened progressively through targeted platform work.
 
 ## Type Support Overview
 
@@ -67,7 +77,7 @@ The current implementation uses a fixed memory management pattern:
 
 ## Current Limitations
 
-1. **Platform limitation**: Only supports Windows/Linux on `amd64` and `arm64`
+1. **Platform limitation**: Only supports Windows/Linux on `amd64` and `arm64`, plus Darwin on `arm64`
 2. **Type limitation**: Does not support Go-specific types like maps, channels, and interfaces
 3. **Memory management**: Uses a fixed allocation pattern and does not support custom allocators
 4. **Performance overhead**: Requires data copying for each call

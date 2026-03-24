@@ -1,49 +1,82 @@
-//go:build amd64
+//go:build amd64 && !windows
 
 package asmcall
 
 import (
-	_ "runtime"
 	"unsafe"
+	_ "unsafe"
 )
 
 var _ = CallFuncG0P2StoreR1
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P0(fn unsafe.Pointer)
+//go:linkname runtimeSystemstack runtime.systemstack
+func runtimeSystemstack(fn func())
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P0R1(fn unsafe.Pointer) uintptr
+func CallFuncG0P0(fn unsafe.Pointer) {
+	runtimeSystemstack(func() {
+		CallFuncP0(fn)
+	})
+}
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P1(fn, arg0 unsafe.Pointer)
+func CallFuncG0P0R1(fn unsafe.Pointer) uintptr {
+	var ret uintptr
+	runtimeSystemstack(func() {
+		ret = CallFuncP0R1(fn)
+	})
+	return ret
+}
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P1R1(fn, arg0 unsafe.Pointer) uintptr
+func CallFuncG0P1(fn, arg0 unsafe.Pointer) {
+	runtimeSystemstack(func() {
+		CallFuncP1(fn, arg0)
+	})
+}
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P2(fn, arg0, arg1 unsafe.Pointer)
+func CallFuncG0P1R1(fn, arg0 unsafe.Pointer) uintptr {
+	var ret uintptr
+	runtimeSystemstack(func() {
+		ret = CallFuncP1R1(fn, arg0)
+	})
+	return ret
+}
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P2StoreR1(fn, arg0, arg1, out unsafe.Pointer)
+func CallFuncG0P2(fn, arg0, arg1 unsafe.Pointer) {
+	runtimeSystemstack(func() {
+		CallFuncP2(fn, arg0, arg1)
+	})
+}
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P2R1(fn, arg0, arg1 unsafe.Pointer) uintptr
+func CallFuncG0P2StoreR1(fn, arg0, arg1, out unsafe.Pointer) {
+	var ret uintptr
+	runtimeSystemstack(func() {
+		ret = CallFuncP2R1(fn, arg0, arg1)
+	})
+	if out != nil {
+		*(*uintptr)(out) = ret
+	}
+}
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P3(fn, arg0, arg1, arg2 unsafe.Pointer)
+func CallFuncG0P2R1(fn, arg0, arg1 unsafe.Pointer) uintptr {
+	var ret uintptr
+	runtimeSystemstack(func() {
+		ret = CallFuncP2R1(fn, arg0, arg1)
+	})
+	return ret
+}
 
-//go:noescape
-//go:nosplit
-func CallFuncG0P3R1(fn, arg0, arg1, arg2 unsafe.Pointer) uintptr
+func CallFuncG0P3(fn, arg0, arg1, arg2 unsafe.Pointer) {
+	runtimeSystemstack(func() {
+		CallFuncP3(fn, arg0, arg1, arg2)
+	})
+}
+
+func CallFuncG0P3R1(fn, arg0, arg1, arg2 unsafe.Pointer) uintptr {
+	var ret uintptr
+	runtimeSystemstack(func() {
+		ret = CallFuncP3R1(fn, arg0, arg1, arg2)
+	})
+	return ret
+}
 
 //go:noescape
 //go:nosplit

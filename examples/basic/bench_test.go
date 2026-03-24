@@ -1,4 +1,4 @@
-//go:build (amd64 || arm64) && (windows || linux)
+//go:build ((windows || linux) && (amd64 || arm64)) || (darwin && arm64)
 
 package main
 
@@ -12,6 +12,7 @@ var loadOnce sync.Once
 func ensureLoaded(b testing.TB) {
 	b.Helper()
 	loadOnce.Do(func() {
+		prepareExampleRuntime(b)
 		if err := Default.Load(); err != nil {
 			b.Fatalf("Load() error = %v", err)
 		}

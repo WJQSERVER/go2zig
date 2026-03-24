@@ -12,6 +12,24 @@
 - **Builder 模式** - 一步生成 Go 包装并编译 Zig 动态库
 - **双 API 风格** - 同时支持 `Client` 方法和顶层函数，使用更灵活
 
+## 实验性流式支持
+
+`go2zig` 现在包含基于 `GoReader` 与 `GoWriter` 的实验性流桥接能力。
+
+- Go 侧辅助类型当前支持 `io.Reader`、`io.Writer`、`io.ReadCloser`、`io.WriteCloser` 以及 `io.Pipe`
+- Zig 侧通过 `rt.streamRead(...)` 与 `rt.streamWrite(...)` 以同步分块方式消费流句柄
+- 当前实现是基于块的同步流桥接，还不是异步或全双工协议层
+- 流式能力必须显式开启：`WithStreamExperimental(true)` 或 `-stream-experimental`
+
+## 平台分级
+
+参考 `purego` 的支持分级思路，`go2zig` 当前将平台支持划分为：
+
+- **Tier 1** - CI 主验证目标：`windows/amd64`、`linux/amd64`
+- **Tier 2** - 已支持交叉构建或新接入的平台：`windows/arm64`、`linux/arm64`、`darwin/arm64`
+
+Tier 2 平台按 best-effort 方式支持，默认保证构建和生成包装可用；运行时边界行为仍可能需要额外的平台专项加固。
+
 ## 平台支持
 
 ### 支持的平台
@@ -19,16 +37,17 @@
 - ✅ **Windows/arm64** - 无 cgo 汇编运行时已支持
 - ✅ **Linux/amd64** - 完全支持，包含 CI 测试
 - ✅ **Linux/arm64** - 无 cgo 汇编运行时已支持
+- ✅ **Darwin/arm64** - 已支持动态加载与生成包装
 
 ### 不支持的平台
-- ❌ **macOS** - 当前不支持
+- ❌ **Darwin/amd64** - 当前不支持
 - ❌ **其他架构** - 当前不支持
 
 ## 环境要求
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **平台**：Windows 或 Linux（支持 `amd64` 和 `arm64`）
+- **平台**：Windows/Linux（支持 `amd64` 和 `arm64`）以及 Darwin（仅 `arm64`）
 
 ## 支持的类型
 
@@ -114,6 +133,9 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib mylib -no-build
 
 # 生成并构建动态库
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib
+
+# 生成时禁用顶层转发函数
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib -no-top-level
 ```
 
 ### 3. 在 Go 中使用
@@ -193,6 +215,21 @@ err := go2zig.NewBuilder().
     Build()
 ```
 
+如果你的项目已经手写了一层更高层的包装，并且希望避免生成 `Login(...)` 这类包级顶层转发函数，可以显式关闭：
+
+```go
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("mylib").
+    WithTopLevelFunctions(false).
+    Build()
+```
+
+这样仍会保留 `Go2ZigClient` 方法，例如 `client.Login(...)`，但不会生成顶层转发函数，从而降低与手写包装层发生重名冲突的概率。
+
 ## 示例
 
 查看 `examples/basic/` 获取完整的工作示例，演示：
@@ -217,7 +254,7 @@ err := go2zig.NewBuilder().
 
 ## 限制
 
-1. **平台**：仅支持 Windows/Linux 上的 `amd64` 与 `arm64`
+1. **平台**：仅支持 Windows/Linux 上的 `amd64` 与 `arm64`，以及 Darwin 上的 `arm64`
 2. **类型**：不支持 Go 的 map、channel、interface
 3. **内存**：固定分配模式（Zig 分配，Go 释放）
 4. **性能**：每次调用需要数据复制

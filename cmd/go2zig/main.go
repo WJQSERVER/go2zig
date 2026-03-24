@@ -10,16 +10,18 @@ import (
 
 func main() {
 	var cfg struct {
-		api     string
-		zig     string
-		out     string
-		pkg     string
-		lib     string
-		opt     string
-		header  string
-		runtime string
-		bridge  string
-		noBuild bool
+		api                string
+		zig                string
+		out                string
+		pkg                string
+		lib                string
+		opt                string
+		header             string
+		runtime            string
+		bridge             string
+		noBuild            bool
+		noTopLevel         bool
+		streamExperimental bool
 	}
 	flag.StringVar(&cfg.api, "api", "", "path to zig api declaration file")
 	flag.StringVar(&cfg.zig, "zig", "", "path to zig library source to compile")
@@ -31,6 +33,8 @@ func main() {
 	flag.StringVar(&cfg.runtime, "runtime-zig", "", "generated zig runtime helper file")
 	flag.StringVar(&cfg.bridge, "bridge-zig", "", "generated zig export bridge file")
 	flag.BoolVar(&cfg.noBuild, "no-build", false, "only generate go wrapper without compiling zig")
+	flag.BoolVar(&cfg.noTopLevel, "no-top-level", false, "do not generate top-level forwarding functions")
+	flag.BoolVar(&cfg.streamExperimental, "stream-experimental", false, "enable experimental GoReader/GoWriter support")
 	flag.Parse()
 
 	b := go2zig.NewBuilder().
@@ -41,7 +45,9 @@ func main() {
 		WithOptimize(cfg.opt).
 		WithHeaderOutput(cfg.header).
 		WithRuntimeZig(cfg.runtime).
-		WithBridgeZig(cfg.bridge)
+		WithBridgeZig(cfg.bridge).
+		WithTopLevelFunctions(!cfg.noTopLevel).
+		WithStreamExperimental(cfg.streamExperimental)
 	if !cfg.noBuild {
 		b.WithZigSource(cfg.zig)
 	}

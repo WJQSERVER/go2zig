@@ -11,9 +11,10 @@
 - **Windows/arm64** - 无 cgo 汇编运行时已支持
 - **Linux/amd64** - 完全支持
 - **Linux/arm64** - 无 cgo 汇编运行时已支持
+- **Darwin/arm64** - 已支持动态加载与生成包装
 
 不支持的平台：
-- macOS
+- **Darwin/amd64** - 当前不支持
 - 其他操作系统
 
 ### 软件要求
@@ -131,6 +132,22 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib basic -no-build
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic
 ```
 
+### 启用实验性流式支持
+
+如果你的 Zig API 使用 `GoReader` / `GoWriter`，需要显式启用实验性流支持：
+
+```bash
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic -stream-experimental
+```
+
+### 禁用顶层转发函数生成
+
+如果你只想保留 `Go2ZigClient` 方法，而不希望生成 `Login(...)` 这类包级顶层转发函数，可以这样做：
+
+```bash
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic -no-top-level
+```
+
 ### 生成的文件
 
 默认会产出：
@@ -188,6 +205,8 @@ func main() {
 - 顶层函数：`Login(...)`
 - client 方法：`Default.Login(...)` 或 `NewGo2ZigClient(path)`
 
+如果启用了 `-no-top-level`，则只会保留 client 方法，不再生成顶层函数。
+
 ### 类型映射
 
 对于支持的类型：
@@ -196,6 +215,83 @@ func main() {
 - POD 切片别名会生成 Go `[]T` 命名别名，并自动做零拷贝入参 / 拷贝出参转换
 - Zig `[N]T` 会生成 Go `[N]T` 数组，并自动做 ABI 转换
 - Zig `?T` 当前会在 Go 侧生成 `*T`
+
+### 实验性流类型
+
+当前实验性流类型使用保留名：
+
+- `GoReader`
+- `GoWriter`
+
+它们只能作为顶层函数参数使用，不能放入：
+
+- 返回值
+- `extern struct` 字段
+- `optional`
+- `slice`
+- `array`
+
+Zig API 需要显式声明：
+
+```zig
+pub const GoReader = usize;
+pub const GoWriter = usize;
+
+pub extern fn copy_stream(reader: GoReader, writer: GoWriter) u64;
+```
+
+在 Zig 实现中，通过 `go2zig_runtime.zig` 提供的 helper 使用：
+
+```zig
+const rt = @import("go2zig_runtime.zig");
+
+pub fn copy_stream(reader: usize, writer: usize) u64 {
+    var total: u64 = 0;
+    var buf: [32]u8 = undefined;
+    while (true) {
+        const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => @panic("stream read failed"),
+        };
+        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
+        total += @as(u64, @intCast(written));
+    }
+    return total;
+}
+```
+
+Go 侧则通过辅助构造函数包装标准流对象：
+
+```go
+reader, err := NewGoReader(strings.NewReader("hello"))
+if err != nil {
+    panic(err)
+}
+
+var out bytes.Buffer
+writer, err := NewGoWriter(&out)
+if err != nil {
+    panic(err)
+}
+
+copied := CopyStream(reader, writer)
+_ = copied
+```
+
+当前支持包装：
+
+- `io.Reader`
+- `io.Writer`
+- `io.ReadCloser`
+- `io.WriteCloser`
+- `io.Pipe`
+- `*os.File`
+
+当前限制：
+
+- 这是实验性能力，必须显式开启
+- 当前是同步分块流，不是异步或全双工协议
+- Zig 侧实际接收到的是文件句柄风格的 `usize`
 
 ## 6. 自定义动态库路径
 
@@ -240,6 +336,7 @@ func Flush() error
 - `WithPackageName(name)`
 - `WithLibraryName(name)`
 - `WithOptimize(mode)`
+- `WithTopLevelFunctions(enabled)`
 - `Build()`
 
 典型写法：
@@ -253,6 +350,21 @@ err := go2zig.NewBuilder().
     WithOutput("./gen.go").
     WithPackageName("main").
     WithLibraryName("basic").
+    Build()
+```
+
+如果项目已经手写了一层更高层的包装，也可以在 Builder 中关闭顶层函数生成：
+
+```go
+import "go2zig"
+
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("basic").
+    WithTopLevelFunctions(false).
     Build()
 ```
 
@@ -300,7 +412,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 ### Q5: 为什么有些类型不支持？
 
 当前设计限制：
-- **平台限制**：仅支持 `amd64` 和 `arm64`
+- **平台限制**：仅支持 Windows/Linux 上的 `amd64` 与 `arm64`，以及 Darwin 上的 `arm64`
 - **类型限制**：为了保持 ABI 稳定性和性能，不支持动态类型
 - **内存管理**：固定分配模式，无法自定义
 
@@ -326,7 +438,7 @@ GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 
 1. **类型不支持**：检查是否使用了不支持的类型
 2. **语法错误**：确保使用了正确的 Zig 语法
-3. **平台不支持**：确保在 Windows/Linux 的 `amd64` 或 `arm64` 上运行
+3. **平台不支持**：确保在 Windows/Linux 的 `amd64` 或 `arm64` 上运行，或在 Darwin 的 `arm64` 上运行
 
 ## 12. 最佳实践
 

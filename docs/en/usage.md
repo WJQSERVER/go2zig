@@ -11,9 +11,10 @@ Currently supported platforms:
 - **Windows/arm64** - Supported by the no-cgo asm runtime
 - **Linux/amd64** - Full support
 - **Linux/arm64** - Supported by the no-cgo asm runtime
+- **Darwin/arm64** - Dynamic loading and generated wrappers supported
 
 Unsupported platforms:
-- macOS
+- **Darwin/amd64** - Not currently supported
 - Other operating systems
 
 ### Software Requirements
@@ -131,6 +132,22 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib basic -no-build
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic
 ```
 
+### Enable Experimental Streaming
+
+If your Zig API uses `GoReader` / `GoWriter`, enable experimental stream support explicitly:
+
+```bash
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic -stream-experimental
+```
+
+### Generate Without Top-Level Forwarders
+
+If you want to keep only `Go2ZigClient` methods and skip package-level forwarding functions like `Login(...)`, use:
+
+```bash
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic -no-top-level
+```
+
 ### Generated Files
 
 By default, the following are produced:
@@ -188,6 +205,8 @@ func main() {
 - Top-level functions: `Login(...)`
 - Client methods: `Default.Login(...)` or `NewGo2ZigClient(path)`
 
+If `-no-top-level` is enabled, only client methods are generated.
+
 ### Type Mapping
 
 For supported types:
@@ -196,6 +215,83 @@ For supported types:
 - POD slice aliases generate Go `[]T` named aliases, with automatic zero-copy input / copy output conversion
 - Zig `[N]T` generates Go `[N]T` arrays, with automatic ABI conversion
 - Zig `?T` currently generates `*T` on the Go side
+
+### Experimental Stream Types
+
+The current experimental stream bridge uses reserved names:
+
+- `GoReader`
+- `GoWriter`
+
+They can only be used as top-level function parameters and cannot appear in:
+
+- return values
+- `extern struct` fields
+- `optional`
+- `slice`
+- `array`
+
+Declare them explicitly in the Zig API:
+
+```zig
+pub const GoReader = usize;
+pub const GoWriter = usize;
+
+pub extern fn copy_stream(reader: GoReader, writer: GoWriter) u64;
+```
+
+On the Zig side, use the helpers from `go2zig_runtime.zig`:
+
+```zig
+const rt = @import("go2zig_runtime.zig");
+
+pub fn copy_stream(reader: usize, writer: usize) u64 {
+    var total: u64 = 0;
+    var buf: [32]u8 = undefined;
+    while (true) {
+        const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => @panic("stream read failed"),
+        };
+        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
+        total += @as(u64, @intCast(written));
+    }
+    return total;
+}
+```
+
+On the Go side, wrap standard stream values with the generated helpers:
+
+```go
+reader, err := NewGoReader(strings.NewReader("hello"))
+if err != nil {
+    panic(err)
+}
+
+var out bytes.Buffer
+writer, err := NewGoWriter(&out)
+if err != nil {
+    panic(err)
+}
+
+copied := CopyStream(reader, writer)
+_ = copied
+```
+
+Currently supported wrappers include:
+
+- `io.Reader`
+- `io.Writer`
+- `io.ReadCloser`
+- `io.WriteCloser`
+- `io.Pipe`
+- `*os.File`
+
+Current limitations:
+
+- This feature is experimental and must be enabled explicitly
+- The current bridge is a synchronous block stream, not an async or full-duplex protocol
+- Zig currently receives file-handle-style `usize` values under the hood
 
 ## 6. Custom Dynamic Library Path
 
@@ -240,6 +336,7 @@ If you call the generator directly in Go code, the most commonly used are:
 - `WithPackageName(name)`
 - `WithLibraryName(name)`
 - `WithOptimize(mode)`
+- `WithTopLevelFunctions(enabled)`
 - `Build()`
 
 Typical usage:
@@ -253,6 +350,21 @@ err := go2zig.NewBuilder().
     WithOutput("./gen.go").
     WithPackageName("main").
     WithLibraryName("basic").
+    Build()
+```
+
+If your project already has a hand-written wrapper layer, you can also disable top-level forwarding functions in the Builder:
+
+```go
+import "go2zig"
+
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("basic").
+    WithTopLevelFunctions(false).
     Build()
 ```
 
@@ -300,7 +412,7 @@ Recommended order:
 ### Q5: Why are some types not supported?
 
 Current design limitations:
-- **Platform limitation**: Only supports `amd64` and `arm64`
+- **Platform limitation**: Only supports Windows/Linux on `amd64` and `arm64`, plus Darwin on `arm64`
 - **Type limitation**: To maintain ABI stability and performance, dynamic types are not supported
 - **Memory management**: Fixed allocation pattern, cannot be customized
 
@@ -326,7 +438,7 @@ Currently no built-in verbose logging, but you can:
 
 1. **Type not supported**: Check if unsupported types are used
 2. **Syntax error**: Ensure correct Zig syntax is used
-3. **Platform not supported**: Ensure running on Windows/Linux with `amd64` or `arm64`
+3. **Platform not supported**: Ensure running on Windows/Linux with `amd64` or `arm64`, or on Darwin with `arm64`
 
 ## 12. Best Practices
 

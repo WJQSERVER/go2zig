@@ -1,4 +1,4 @@
-//go:build !windows && !linux
+//go:build !windows && !linux && !(darwin && arm64)
 
 package dynlib
 

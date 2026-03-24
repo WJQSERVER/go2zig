@@ -12,6 +12,24 @@ A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [r
 - **Builder pattern** - Generate Go wrappers and compile Zig dynamic libraries in one step
 - **Dual API style** - Both `Client` methods and top-level functions for flexible usage
 
+## Experimental Streaming
+
+`go2zig` now includes an experimental streaming bridge based on `GoReader` and `GoWriter`.
+
+- Go-side helpers currently support `io.Reader`, `io.Writer`, `io.ReadCloser`, `io.WriteCloser`, and `io.Pipe`
+- Zig side consumes stream handles synchronously through `rt.streamRead(...)` and `rt.streamWrite(...)`
+- The current implementation is a block-based, synchronous stream bridge; it is not yet an async or full-duplex protocol layer
+- Streaming must be enabled explicitly with `WithStreamExperimental(true)` or `-stream-experimental`
+
+## Platform Tiers
+
+Borrowing the idea of support tiers from `purego`, `go2zig` currently treats platform support like this:
+
+- **Tier 1** - CI-tested primary targets: `windows/amd64`, `linux/amd64`
+- **Tier 2** - Cross-build supported or newly enabled targets: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+
+Tier 2 targets are supported on a best-effort basis. Build and generated wrapper support are expected, while runtime edge cases may still need extra platform-specific hardening.
+
 ## Platform Support
 
 ### Supported Platforms
@@ -19,16 +37,17 @@ A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [r
 - ✅ **Windows/arm64** - Supported by the no-cgo asm runtime
 - ✅ **Linux/amd64** - Full support with CI testing
 - ✅ **Linux/arm64** - Supported by the no-cgo asm runtime
+- ✅ **Darwin/arm64** - Dynamic loading and generated wrappers supported
 
 ### Unsupported Platforms
-- ❌ **macOS** - Not currently supported
+- ❌ **Darwin/amd64** - Not supported
 - ❌ **Other architectures** - Not currently supported
 
 ## Requirements
 
 - **Go** 1.26+
 - **Zig** 0.15.2
-- **Platform**: Windows or Linux (`amd64` and `arm64`)
+- **Platform**: Windows/Linux (`amd64` and `arm64`) or Darwin (`arm64` only)
 
 ## Supported Types
 
@@ -114,6 +133,9 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib mylib -no-build
 
 # Generate and build dynamic library
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib
+
+# Generate without top-level forwarding functions
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib mylib -no-top-level
 ```
 
 ### 3. Use in Go
@@ -193,6 +215,21 @@ err := go2zig.NewBuilder().
     Build()
 ```
 
+If your project already provides its own higher-level wrapper layer and you want to avoid generated package-level forwarding functions like `Login(...)`, disable them explicitly:
+
+```go
+err := go2zig.NewBuilder().
+    WithAPI("./api.zig").
+    WithZigSource("./lib.zig").
+    WithOutput("./gen.go").
+    WithPackageName("main").
+    WithLibraryName("mylib").
+    WithTopLevelFunctions(false).
+    Build()
+```
+
+This keeps `Go2ZigClient` methods such as `client.Login(...)`, but skips top-level forwarding functions and helps avoid symbol collisions with hand-written wrappers.
+
 ## Examples
 
 See `examples/basic/` for a complete working example demonstrating:
@@ -218,7 +255,7 @@ See `examples/basic/` for a complete working example demonstrating:
 
 ## Limitations
 
-1. **Platform**: Only Windows/Linux on `amd64` and `arm64`
+1. **Platform**: Only Windows/Linux on `amd64` and `arm64`, plus Darwin on `arm64`
 2. **Types**: No support for Go maps, channels, interfaces
 3. **Memory**: Fixed allocation pattern (Zig allocates, Go frees)
 4. **Performance**: Data copying required for each call
