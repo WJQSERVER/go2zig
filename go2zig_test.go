@@ -1,12 +1,14 @@
 package go2zig
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 const integrationAPI = `
@@ -446,6 +448,441 @@ func TestBuilderDisablesTopLevelFunctions(t *testing.T) {
 	}
 	if strings.Contains(text, "func Login(name string) string") {
 		t.Fatalf("generated file should not contain top-level Login\n%s", text)
+	}
+}
+
+func TestBuilderRejectsStreamsWithoutExperimentalFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, `
+        pub extern fn consume(reader: GoReader, writer: GoWriter) void;
+    `)
+
+	err := NewBuilder().
+		WithAPI(apiPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		Build()
+	if err == nil {
+		t.Fatal("Builder.Build() error = nil, want stream experimental error")
+	}
+	if !strings.Contains(err.Error(), "experimental") {
+		t.Fatalf("Builder.Build() error = %q, want experimental message", err)
+	}
+}
+
+func TestBuilderEnablesStreamsWithExperimentalFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, `
+        pub extern fn consume(reader: GoReader, writer: GoWriter) void;
+    `)
+
+	err := NewBuilder().
+		WithAPI(apiPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		WithStreamExperimental(true).
+		Build()
+	if err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile(gen.go) error = %v", err)
+	}
+	text := string(content)
+	for _, check := range []string{"type GoReader struct", "type GoWriter struct", "func (c *Go2ZigClient) Consume(reader GoReader, writer GoWriter)"} {
+		if !strings.Contains(text, check) {
+			t.Fatalf("generated file missing %q\n%s", check, text)
+		}
+	}
+	if strings.Contains(text, `go2zig_stream_read`) || strings.Contains(text, `go2zig_stream_write`) {
+		t.Fatalf("generated file should use fd-based MVP instead of callback bridge symbols\n%s", text)
+	}
+}
+
+func TestBuilderBuildsExperimentalStreamsAcrossDirectories(t *testing.T) {
+	t.Parallel()
+
+	zigPath, err := exec.LookPath("zig")
+	if err != nil {
+		t.Skip("zig not available in PATH")
+	}
+	_ = zigPath
+
+	root := t.TempDir()
+	apiDir := filepath.Join(root, "api")
+	zigDir := filepath.Join(root, "zig")
+	outDir := filepath.Join(root, "gen")
+	if err := os.MkdirAll(apiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(apiDir) error = %v", err)
+	}
+	if err := os.MkdirAll(zigDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(zigDir) error = %v", err)
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(outDir) error = %v", err)
+	}
+
+	apiPath := filepath.Join(apiDir, "api.zig")
+	libPath := filepath.Join(zigDir, "lib.zig")
+	outPath := filepath.Join(outDir, "gen.go")
+	writeFile(t, apiPath, `
+        pub const String = extern struct {
+            ptr: [*]const u8,
+            len: usize,
+        };
+
+        pub const Bytes = extern struct {
+            ptr: [*]const u8,
+            len: usize,
+        };
+
+        pub const GoReader = usize;
+        pub const GoWriter = usize;
+
+        pub extern fn consume(reader: GoReader, writer: GoWriter) void;
+    `)
+	writeFile(t, libPath, `
+        const api = @import("../api/api.zig");
+        const rt = @import("../gen/go2zig_runtime.zig");
+
+        pub fn consume(reader: api.GoReader, writer: api.GoWriter) void {
+            var buf: [32]u8 = undefined;
+            while (true) {
+                const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
+                    error.EndOfStream => break,
+                    else => @panic("stream read failed"),
+                };
+                _ = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
+            }
+        }
+    `)
+
+	err = NewBuilder().
+		WithAPI(apiPath).
+		WithZigSource(libPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		WithStreamExperimental(true).
+		Build()
+	if err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(outDir, outputLibraryFilename("sample", true))); err != nil {
+		t.Fatalf("expected generated library missing: %v", err)
+	}
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile(gen.go) error = %v", err)
+	}
+	text := string(content)
+	for _, check := range []string{"type GoReader struct", "type GoWriter struct", "func NewGoReader(reader io.Reader) (GoReader, error)", "func NewGoReadCloser(reader io.ReadCloser) (GoReader, error)", "func NewGoWriter(writer io.Writer) (GoWriter, error)", "func NewGoWriteCloser(writer io.WriteCloser) (GoWriter, error)", "func (v GoReader) Close() error", "func (v GoWriter) Close() error", "func (v GoReader) Err() error", "func (v GoWriter) Err() error"} {
+		if !strings.Contains(text, check) {
+			t.Fatalf("generated file missing %q\n%s", check, text)
+		}
+	}
+}
+
+func TestBuilderGeneratedProgramStreamsReaderWriterAndClosers(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		t.Skip("stream runtime test currently targets windows/amd64")
+	}
+	if _, err := exec.LookPath("zig"); err != nil {
+		t.Skip("zig not available in PATH")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/streamsample\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "api.zig"), `
+pub const String = extern struct {
+    ptr: [*]const u8,
+    len: usize,
+};
+
+pub const Bytes = extern struct {
+    ptr: [*]const u8,
+    len: usize,
+};
+
+pub const GoReader = usize;
+pub const GoWriter = usize;
+
+pub extern fn copy_stream(reader: GoReader, writer: GoWriter) u64;
+`)
+	writeFile(t, filepath.Join(dir, "lib.zig"), `
+const api = @import("api.zig");
+const rt = @import("go2zig_runtime.zig");
+
+pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) u64 {
+    var total: u64 = 0;
+    var buf: [32]u8 = undefined;
+    while (true) {
+        const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => @panic("stream read failed"),
+        };
+        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
+        total += @as(u64, @intCast(written));
+    }
+    return total;
+}
+
+`)
+
+	outPath := filepath.Join(dir, "gen.go")
+	if err := NewBuilder().
+		WithAPI(filepath.Join(dir, "api.zig")).
+		WithZigSource(filepath.Join(dir, "lib.zig")).
+		WithOutput(outPath).
+		WithPackageName("main").
+		WithLibraryName("streamsample").
+		WithStreamExperimental(true).
+		Build(); err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	writeFile(t, filepath.Join(dir, "main.go"), `package main
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+func mustReader(v GoReader, err error) GoReader {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func mustWriter(v GoWriter, err error) GoWriter {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func writeFile(path, content string) {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		panic(err)
+	}
+}
+
+func readFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
+}
+
+func main() {
+	if err := Default.Load(); err != nil {
+		panic(err)
+	}
+
+	writeFile("alpha.txt", "alpha")
+	writeFile("beta.txt", "beta")
+	writeFile("gamma.txt", "gamma")
+
+	in1, err := os.Open("alpha.txt")
+	if err != nil { panic(err) }
+	out1, err := os.Create("out1.txt")
+	if err != nil { panic(err) }
+	if n := CopyStream(mustReader(NewGoReader(in1)), mustWriter(NewGoWriter(out1))); n != 5 {
+		panic(fmt.Sprintf("copy1=%d", n))
+	}
+
+	in2, err := os.Open("beta.txt")
+	if err != nil { panic(err) }
+	out2, err := os.Create("out2.txt")
+	if err != nil { panic(err) }
+	if n := CopyStream(mustReader(NewGoReadCloser(in2)), mustWriter(NewGoWriteCloser(out2))); n != 4 {
+		panic(fmt.Sprintf("copy2=%d", n))
+	}
+
+	in3, err := os.Open("gamma.txt")
+	if err != nil { panic(err) }
+	out3, err := os.Create("out3.txt")
+	if err != nil { panic(err) }
+	if n := CopyStream(mustReader(NewGoReadCloser(in3)), mustWriter(NewGoWriter(out3))); n != 5 {
+		panic(fmt.Sprintf("copy3=%d", n))
+	}
+
+	fmt.Printf("%s|%s|%s", strings.TrimSpace(readFile("out1.txt")), strings.TrimSpace(readFile("out2.txt")), strings.TrimSpace(readFile("out3.txt")))
+}
+`)
+
+	cmd := exec.Command("go", "run", ".")
+	cmd.Dir = dir
+	if err := os.MkdirAll(filepath.Join(dir, ".gocache"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.gocache) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".gotmp"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.gotmp) error = %v", err)
+	}
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOCACHE="+filepath.Join(dir, ".gocache"), "GOTMPDIR="+filepath.Join(dir, ".gotmp"))
+	cmd.Stdin = nil
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run failed: %v\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), "alpha|beta|gamma"; got != want {
+		t.Fatalf("program output = %q, want %q", got, want)
+	}
+}
+
+func TestBuilderGeneratedProgramStreamsPipeEndpoints(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		t.Skip("stream pipe runtime test currently targets windows/amd64")
+	}
+	if _, err := exec.LookPath("zig"); err != nil {
+		t.Skip("zig not available in PATH")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/streampipe\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "api.zig"), `
+pub const String = extern struct {
+    ptr: [*]const u8,
+    len: usize,
+};
+
+pub const Bytes = extern struct {
+    ptr: [*]const u8,
+    len: usize,
+};
+
+pub const GoReader = usize;
+pub const GoWriter = usize;
+
+pub extern fn copy_stream(reader: GoReader, writer: GoWriter) u64;
+`)
+	writeFile(t, filepath.Join(dir, "lib.zig"), `
+const api = @import("api.zig");
+const rt = @import("go2zig_runtime.zig");
+
+pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) u64 {
+    var total: u64 = 0;
+    var buf: [16]u8 = undefined;
+    while (true) {
+        const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => @panic("stream read failed"),
+        };
+        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
+        total += @as(u64, @intCast(written));
+    }
+    return total;
+}
+`)
+
+	outPath := filepath.Join(dir, "gen.go")
+	if err := NewBuilder().
+		WithAPI(filepath.Join(dir, "api.zig")).
+		WithZigSource(filepath.Join(dir, "lib.zig")).
+		WithOutput(outPath).
+		WithPackageName("main").
+		WithLibraryName("streampipe").
+		WithStreamExperimental(true).
+		Build(); err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	writeFile(t, filepath.Join(dir, "main.go"), `package main
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+)
+
+func mustReader(v GoReader, err error) GoReader {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func mustWriter(v GoWriter, err error) GoWriter {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func main() {
+	if err := Default.Load(); err != nil {
+		panic(err)
+	}
+
+	pr, pw := io.Pipe()
+	go func() {
+		_, _ = io.WriteString(pw, "pipe-in")
+		_ = pw.Close()
+	}()
+
+	var out bytes.Buffer
+	reader := mustReader(NewGoReadCloser(pr))
+	writer := mustWriter(NewGoWriter(&out))
+	if n := CopyStream(reader, writer); n != 7 {
+		panic(fmt.Sprintf("copy=%d", n))
+	}
+	if err := reader.Err(); err != nil {
+		panic(err)
+	}
+	if err := writer.Err(); err != nil {
+		panic(err)
+	}
+
+	fmt.Print(out.String())
+}
+`)
+
+	exePath := filepath.Join(dir, "streampipe.exe")
+	buildCmd := exec.Command("go", "build", "-p=1", "-o", exePath, ".")
+	buildCmd.Dir = dir
+	if err := os.MkdirAll(filepath.Join(dir, ".gocache"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.gocache) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".gotmp"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.gotmp) error = %v", err)
+	}
+	tmpDir := filepath.Join(dir, ".gotmp")
+	buildCmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOCACHE="+filepath.Join(dir, ".gocache"), "GOTMPDIR="+tmpDir, "TMP="+tmpDir, "TEMP="+tmpDir)
+	buildOut, err := buildCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, buildOut)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exePath)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("stream pipe program timed out\n%s", out)
+	}
+	if err != nil {
+		t.Fatalf("stream pipe program failed: %v\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), "pipe-in"; got != want {
+		t.Fatalf("program output = %q, want %q", got, want)
 	}
 }
 

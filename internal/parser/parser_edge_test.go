@@ -138,3 +138,36 @@ func TestParseRecognizesCRLFSliceAlias(t *testing.T) {
 		t.Fatalf("mirror param kind = %v, want slice", got)
 	}
 }
+
+func TestParseRecognizesStreamTypes(t *testing.T) {
+	t.Parallel()
+
+	api, err := Parse(`
+        pub extern fn consume(reader: GoReader, writer: GoWriter) void;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := api.Funcs[0].Params[0].Type.Kind; got != model.TypeGoReader {
+		t.Fatalf("consume reader kind = %v, want GoReader", got)
+	}
+	if got := api.Funcs[0].Params[1].Type.Kind; got != model.TypeGoWriter {
+		t.Fatalf("consume writer kind = %v, want GoWriter", got)
+	}
+}
+
+func TestParseRejectsNestedStreamTypes(t *testing.T) {
+	t.Parallel()
+
+	_, err := Parse(`
+        pub const Payload = extern struct {
+            reader: GoReader,
+        };
+    `)
+	if err == nil {
+		t.Fatal("Parse() error = nil, want nested stream rejection")
+	}
+	if !strings.Contains(err.Error(), "unsupported stream type") {
+		t.Fatalf("Parse() error = %q, want unsupported stream type message", err)
+	}
+}

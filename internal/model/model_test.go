@@ -266,3 +266,35 @@ func TestStructSliceElemSupportMatrix(t *testing.T) {
 		t.Fatal("Bucket should be allowed as slice element when its slice field element is POD")
 	}
 }
+
+func TestStreamParamsAllowedOnlyAtTopLevel(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(nil, nil, nil, nil, []*Function{{
+		Name:   "consume",
+		Params: []Field{{Name: "reader", Type: TypeRef{Kind: TypeGoReader, Name: "GoReader", Raw: "GoReader"}}},
+		Return: TypeRef{Kind: TypeVoid, Raw: "void"},
+	}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := api.Funcs[0].Params[0].Type.Kind; got != TypeGoReader {
+		t.Fatalf("consume param kind = %v, want GoReader", got)
+	}
+
+	_, err = New([]*Struct{{
+		Name:   "Payload",
+		Fields: []Field{{Name: "reader", Type: TypeRef{Kind: TypeGoReader, Name: "GoReader", Raw: "GoReader"}}},
+	}}, nil, nil, nil, nil)
+	if err == nil {
+		t.Fatal("New() error = nil, want stream field rejection")
+	}
+
+	_, err = New(nil, nil, nil, nil, []*Function{{
+		Name:   "bad_return",
+		Return: TypeRef{Kind: TypeGoWriter, Name: "GoWriter", Raw: "GoWriter"},
+	}})
+	if err == nil {
+		t.Fatal("New() error = nil, want stream return rejection")
+	}
+}

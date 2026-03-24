@@ -13,14 +13,18 @@ import (
 )
 
 type Config struct {
-	PackageName     string
-	LibraryName     string
-	APIModule       string
-	ImplModule      string
-	DisableTopLevel bool
+	PackageName        string
+	LibraryName        string
+	APIModule          string
+	ImplModule         string
+	DisableTopLevel    bool
+	StreamExperimental bool
 }
 
 func Render(api *model.API, cfg Config) ([]byte, error) {
+	if err := validateStreams(api, cfg); err != nil {
+		return nil, err
+	}
 	if cfg.PackageName == "" {
 		cfg.PackageName = "main"
 	}
@@ -41,6 +45,10 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	body.WriteString("\t\"unsafe\"\n\n")
 	body.WriteString("\t\"go2zig/asmcall\"\n")
 	body.WriteString("\t\"go2zig/dynlib\"\n")
+	if apiUsesStreams(api) {
+		body.WriteString("\t\"io\"\n")
+		body.WriteString("\t\"os\"\n")
+	}
 	body.WriteString(")\n\n")
 
 	body.WriteString("type Go2ZigClient struct {\n\trt *_go2zigRuntime\n}\n\n")
@@ -100,6 +108,9 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	body.WriteString("\tif err := rt.Load(); err != nil {\n\t\tpanic(err)\n\t}\n")
 	body.WriteString("\tasmcall.CallFuncG0P1(unsafe.Pointer(proc), frame)\n")
 	body.WriteString("}\n\n")
+	if apiUsesStreams(api) {
+		body.WriteString(renderStreamRuntime())
+	}
 	body.WriteString("func _go2zigDefaultLibraryPath() string {\n")
 	body.WriteString("\t_, file, _, ok := runtime.Caller(0)\n")
 	body.WriteString("\tname := _go2zigDynamicLibraryName()\n")
@@ -270,6 +281,26 @@ func RenderZigRuntime(api *model.API, cfg Config) []byte {
 	body.WriteString("pub fn okError() ErrorInfo {\n")
 	body.WriteString("    return .{ .code = 0, .text = .{ .ptr = undefined, .len = 0 } };\n")
 	body.WriteString("}\n\n")
+	if apiUsesStreams(api) {
+		body.WriteString("inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle {\n")
+		body.WriteString("    return switch (@typeInfo(std.fs.File.Handle)) {\n")
+		body.WriteString("        .pointer => @as(std.fs.File.Handle, @ptrFromInt(value)),\n")
+		body.WriteString("        else => @as(std.fs.File.Handle, @intCast(value)),\n")
+		body.WriteString("    };\n")
+		body.WriteString("}\n\n")
+		body.WriteString("pub fn streamRead(reader: usize, buffer: []u8) error{StreamReadFailed, EndOfStream}!usize {\n")
+		body.WriteString("    if (reader == 0) return error.StreamReadFailed;\n")
+		body.WriteString("    const file: std.fs.File = .{ .handle = streamHandleFromUsize(reader) };\n")
+		body.WriteString("    const n = file.read(buffer) catch { return error.StreamReadFailed; };\n")
+		body.WriteString("    if (n == 0) return error.EndOfStream;\n")
+		body.WriteString("    return n;\n")
+		body.WriteString("}\n\n")
+		body.WriteString("pub fn streamWrite(writer: usize, buffer: []const u8) error{StreamWriteFailed}!usize {\n")
+		body.WriteString("    if (writer == 0) return error.StreamWriteFailed;\n")
+		body.WriteString("    const file: std.fs.File = .{ .handle = streamHandleFromUsize(writer) };\n")
+		body.WriteString("    return file.write(buffer) catch { return error.StreamWriteFailed; };\n")
+		body.WriteString("}\n\n")
+	}
 	body.WriteString("pub fn makeError(err: anyerror) ErrorInfo {\n")
 	body.WriteString("    return .{\n")
 	body.WriteString("        .code = @intFromError(err),\n")
@@ -396,6 +427,34 @@ func DynamicLibraryFilename(name, goos string) string {
 	default:
 		return "lib" + clean + ".so"
 	}
+}
+
+func validateStreams(api *model.API, cfg Config) error {
+	if !apiUsesStreams(api) {
+		return nil
+	}
+	if !cfg.StreamExperimental {
+		return fmt.Errorf("go2zig: GoReader/GoWriter support is experimental; enable it explicitly with WithStreamExperimental(true) or -stream-experimental")
+	}
+	return nil
+}
+
+func apiUsesStreams(api *model.API) bool {
+	for _, fn := range api.Funcs {
+		if functionUsesStreams(fn) {
+			return true
+		}
+	}
+	return false
+}
+
+func functionUsesStreams(fn *model.Function) bool {
+	for _, param := range fn.Params {
+		if param.Type.Kind == model.TypeGoReader || param.Type.Kind == model.TypeGoWriter {
+			return true
+		}
+	}
+	return false
 }
 
 type zigField struct {
@@ -546,6 +605,89 @@ func renderOwnStruct(item *model.Struct) string {
 	return b.String()
 }
 
+func renderStreamRuntime() string {
+	var b strings.Builder
+	b.WriteString("type _go2zigStreamState struct {\n")
+	b.WriteString("\tfile *os.File\n")
+	b.WriteString("\towned io.Closer\n")
+	b.WriteString("\tupstream io.Closer\n")
+	b.WriteString("\tdone chan error\n")
+	b.WriteString("\tcloseOnce sync.Once\n")
+	b.WriteString("\twaitOnce sync.Once\n")
+	b.WriteString("\terr error\n")
+	b.WriteString("}\n\n")
+	b.WriteString("func (s *_go2zigStreamState) handle() uintptr {\n")
+	b.WriteString("\tif s == nil || s.file == nil {\n\t\treturn 0\n\t}\n")
+	b.WriteString("\treturn s.file.Fd()\n}\n\n")
+	b.WriteString("func (s *_go2zigStreamState) wait() error {\n")
+	b.WriteString("\tif s == nil || s.done == nil {\n\t\treturn nil\n\t}\n")
+	b.WriteString("\ts.waitOnce.Do(func() {\n\t\ts.err = <-s.done\n\t})\n")
+	b.WriteString("\treturn s.err\n}\n\n")
+	b.WriteString("func (s *_go2zigStreamState) closeOwned() error {\n")
+	b.WriteString("\tif s == nil {\n\t\treturn nil\n\t}\n")
+	b.WriteString("\tvar err error\n")
+	b.WriteString("\ts.closeOnce.Do(func() {\n")
+	b.WriteString("\t\tif s.owned != nil {\n\t\t\terr = s.owned.Close()\n\t\t}\n")
+	b.WriteString("\t})\n")
+	b.WriteString("\treturn err\n}\n\n")
+	b.WriteString("func (s *_go2zigStreamState) close(ignoreErr bool) error {\n")
+	b.WriteString("\tif s == nil {\n\t\treturn nil\n\t}\n")
+	b.WriteString("\tcloseErr := s.closeOwned()\n")
+	b.WriteString("\tif s.upstream != nil && closeErr != nil {\n\t\tcloseErr = nil\n\t}\n")
+	b.WriteString("\tif s.done == nil {\n")
+	b.WriteString("\t\tif ignoreErr {\n\t\t\treturn nil\n\t\t}\n")
+	b.WriteString("\t\treturn closeErr\n\t}\n")
+	b.WriteString("\tif ignoreErr {\n")
+	b.WriteString("\t\tgo func() { _ = s.wait() }()\n")
+	b.WriteString("\t\treturn nil\n\t}\n")
+	b.WriteString("\terr := s.wait()\n")
+	b.WriteString("\tif closeErr != nil {\n\t\treturn closeErr\n\t}\n")
+	b.WriteString("\treturn err\n}\n\n")
+	b.WriteString("type GoReader struct {\n\tstate *_go2zigStreamState\n}\n\n")
+	b.WriteString("type GoWriter struct {\n\tstate *_go2zigStreamState\n}\n\n")
+	b.WriteString("func NewGoReadCloser(reader io.ReadCloser) (GoReader, error) {\n\treturn newGoReader(reader, reader)\n}\n\n")
+	b.WriteString("func NewGoReader(reader io.Reader) (GoReader, error) {\n")
+	b.WriteString("\treturn newGoReader(reader, nil)\n}\n\n")
+	b.WriteString("func newGoReader(reader io.Reader, upstream io.Closer) (GoReader, error) {\n")
+	b.WriteString("\tif reader == nil {\n\t\treturn GoReader{}, fmt.Errorf(\"go2zig: reader is nil\")\n\t}\n")
+	b.WriteString("\tif file, ok := reader.(*os.File); ok {\n")
+	b.WriteString("\t\tstate := &_go2zigStreamState{file: file}\n")
+	b.WriteString("\t\tif upstream != nil {\n\t\t\tstate.owned = upstream\n\t\t}\n")
+	b.WriteString("\t\treturn GoReader{state: state}, nil\n\t}\n")
+	b.WriteString("\tpr, pw, err := os.Pipe()\n\tif err != nil {\n\t\treturn GoReader{}, err\n\t}\n")
+	b.WriteString("\tstate := &_go2zigStreamState{file: pr, owned: pr, upstream: upstream, done: make(chan error, 1)}\n")
+	b.WriteString("\tgo func() {\n")
+	b.WriteString("\t\t_, err := io.Copy(pw, reader)\n")
+	b.WriteString("\t\tif closeErr := pw.Close(); err == nil {\n\t\t\terr = closeErr\n\t\t}\n")
+	b.WriteString("\t\tif state.upstream != nil {\n\t\t\tif closeErr := state.upstream.Close(); err == nil {\n\t\t\t\terr = closeErr\n\t\t\t}\n\t\t}\n")
+	b.WriteString("\t\tstate.done <- err\n\t}()\n")
+	b.WriteString("\treturn GoReader{state: state}, nil\n}\n\n")
+	b.WriteString("func NewGoWriteCloser(writer io.WriteCloser) (GoWriter, error) {\n\treturn newGoWriter(writer, writer)\n}\n\n")
+	b.WriteString("func NewGoWriter(writer io.Writer) (GoWriter, error) {\n")
+	b.WriteString("\treturn newGoWriter(writer, nil)\n}\n\n")
+	b.WriteString("func newGoWriter(writer io.Writer, upstream io.Closer) (GoWriter, error) {\n")
+	b.WriteString("\tif writer == nil {\n\t\treturn GoWriter{}, fmt.Errorf(\"go2zig: writer is nil\")\n\t}\n")
+	b.WriteString("\tif file, ok := writer.(*os.File); ok {\n")
+	b.WriteString("\t\tstate := &_go2zigStreamState{file: file}\n")
+	b.WriteString("\t\tif upstream != nil {\n\t\t\tstate.owned = upstream\n\t\t}\n")
+	b.WriteString("\t\treturn GoWriter{state: state}, nil\n\t}\n")
+	b.WriteString("\tpr, pw, err := os.Pipe()\n\tif err != nil {\n\t\treturn GoWriter{}, err\n\t}\n")
+	b.WriteString("\tstate := &_go2zigStreamState{file: pw, owned: pw, upstream: upstream, done: make(chan error, 1)}\n")
+	b.WriteString("\tgo func() {\n")
+	b.WriteString("\t\t_, err := io.Copy(writer, pr)\n")
+	b.WriteString("\t\tif closeErr := pr.Close(); err == nil {\n\t\t\terr = closeErr\n\t\t}\n")
+	b.WriteString("\t\tif state.upstream != nil {\n\t\t\tif closeErr := state.upstream.Close(); err == nil {\n\t\t\t\terr = closeErr\n\t\t\t}\n\t\t}\n")
+	b.WriteString("\t\tstate.done <- err\n\t}()\n")
+	b.WriteString("\treturn GoWriter{state: state}, nil\n}\n\n")
+	b.WriteString("func (v GoReader) handle() uintptr {\n\treturn v.state.handle()\n}\n\n")
+	b.WriteString("func (v GoWriter) handle() uintptr {\n\treturn v.state.handle()\n}\n\n")
+	b.WriteString("func (v GoReader) Close() error {\n\treturn v.state.close(true)\n}\n\n")
+	b.WriteString("func (v GoWriter) Close() error {\n\treturn v.state.close(false)\n}\n\n")
+	b.WriteString("func (v GoReader) Err() error {\n\tif v.state == nil {\n\t\treturn nil\n\t}\n\treturn v.state.wait()\n}\n\n")
+	b.WriteString("func (v GoWriter) Err() error {\n\tif v.state == nil {\n\t\treturn nil\n\t}\n\treturn v.state.wait()\n}\n\n")
+	return b.String()
+}
+
 func renderFrameStruct(fn *model.Function) string {
 	var b strings.Builder
 	b.WriteString("type ")
@@ -638,6 +780,22 @@ func renderMethod(api *model.API, fn *model.Function) string {
 			b.WriteString(" = ")
 			b.WriteString(keepName)
 			b.WriteString(".value\n")
+			continue
+		}
+		if param.Type.Kind == model.TypeGoReader || param.Type.Kind == model.TypeGoWriter {
+			b.WriteString("\t")
+			b.WriteString("frame.")
+			b.WriteString(param.Name)
+			b.WriteString(" = ")
+			b.WriteString(refExpr(param.Type, goParamName(param.Name)))
+			b.WriteString("\n")
+			b.WriteString("\tdefer func() {\n")
+			b.WriteString("\t\tif err := ")
+			b.WriteString(goParamName(param.Name))
+			b.WriteString(".Close(); err != nil {\n")
+			b.WriteString("\t\t\tpanic(err)\n")
+			b.WriteString("\t\t}\n")
+			b.WriteString("\t}()\n")
 			continue
 		}
 		b.WriteString("\tframe.")
@@ -741,6 +899,10 @@ func refExpr(t model.TypeRef, expr string) string {
 		return "_go2zigRefString(" + expr + ")"
 	case model.TypeBytes:
 		return "_go2zigRefBytes(" + expr + ")"
+	case model.TypeGoReader:
+		return expr + ".handle()"
+	case model.TypeGoWriter:
+		return expr + ".handle()"
 	case model.TypeOptional:
 		return optionalRefFuncName(t) + "(" + expr + ")"
 	case model.TypeSlice:
@@ -767,6 +929,8 @@ func ownExprRT(rtName string, t model.TypeRef, expr string) string {
 		return "_go2zigOwnString(" + rtName + ", " + expr + ")"
 	case model.TypeBytes:
 		return "_go2zigOwnBytes(" + rtName + ", " + expr + ")"
+	case model.TypeGoReader, model.TypeGoWriter:
+		return expr
 	case model.TypeOptional:
 		return optionalOwnFuncName(t) + "(" + rtName + ", " + expr + ")"
 	case model.TypeSlice:
@@ -797,6 +961,10 @@ func goType(t model.TypeRef) string {
 		return "string"
 	case model.TypeBytes:
 		return "[]byte"
+	case model.TypeGoReader:
+		return "GoReader"
+	case model.TypeGoWriter:
+		return "GoWriter"
 	case model.TypeArray:
 		if t.Elem == nil {
 			return t.Raw
@@ -831,6 +999,8 @@ func abiType(t model.TypeRef) string {
 		return "_go2zigString"
 	case model.TypeBytes:
 		return "_go2zigBytes"
+	case model.TypeGoReader, model.TypeGoWriter:
+		return "uintptr"
 	case model.TypeArray:
 		if t.Elem == nil {
 			return t.Raw
@@ -855,6 +1025,8 @@ func zigType(t model.TypeRef) string {
 		return "api." + t.Name
 	case model.TypeString, model.TypeBytes, model.TypeStruct:
 		return "api." + t.TypeName()
+	case model.TypeGoReader, model.TypeGoWriter:
+		return "usize"
 	case model.TypeArray:
 		if t.Elem == nil {
 			return t.Raw
@@ -900,6 +1072,8 @@ func goFrameType(t model.TypeRef) string {
 		return "_go2zigString"
 	case model.TypeBytes:
 		return "_go2zigBytes"
+	case model.TypeGoReader, model.TypeGoWriter:
+		return "uintptr"
 	case model.TypeStruct:
 		return abiStructName(t.Name)
 	case model.TypeArray:
@@ -1237,6 +1411,9 @@ func renderZigOptionalHelpers(t model.TypeRef) string {
 }
 
 func zigBridgeArgExpr(t model.TypeRef, expr string) string {
+	if t.Kind == model.TypeGoReader || t.Kind == model.TypeGoWriter {
+		return expr
+	}
 	if t.Kind == model.TypeOptional {
 		return "rt." + optionalToZigFuncName(t) + "(" + expr + ")"
 	}
