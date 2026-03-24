@@ -12,6 +12,15 @@
 - **Builder 模式** - 一步生成 Go 包装并编译 Zig 动态库
 - **双 API 风格** - 同时支持 `Client` 方法和顶层函数，使用更灵活
 
+## 实验性流式支持
+
+`go2zig` 现在包含基于 `GoReader` 与 `GoWriter` 的实验性流桥接能力。
+
+- Go 侧辅助类型当前支持 `io.Reader`、`io.Writer`、`io.ReadCloser`、`io.WriteCloser` 以及 `io.Pipe`
+- Zig 侧通过 `rt.streamRead(...)` 与 `rt.streamWrite(...)` 以同步分块方式消费流句柄
+- 当前实现是基于块的同步流桥接，还不是异步或全双工协议层
+- 流式能力必须显式开启：`WithStreamExperimental(true)` 或 `-stream-experimental`
+
 ## 平台分级
 
 参考 `purego` 的支持分级思路，`go2zig` 当前将平台支持划分为：

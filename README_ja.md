@@ -12,6 +12,15 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 - **Builder パターン** - Go ラッパーの生成と Zig 動的ライブラリのビルドを 1 ステップで行えます
 - **デュアル API スタイル** - `Client` メソッドとトップレベル関数の両方を提供し、柔軟に利用できます
 
+## Experimental Streaming
+
+`go2zig` には、`GoReader` と `GoWriter` に基づく実験的なストリーム橋接が追加されています。
+
+- Go 側の補助型は現在 `io.Reader`、`io.Writer`、`io.ReadCloser`、`io.WriteCloser`、`io.Pipe` を扱えます
+- Zig 側では `rt.streamRead(...)` と `rt.streamWrite(...)` を使って同期的な分割読み書きを行います
+- 現在の実装はブロック単位の同期ストリーム橋接であり、async や full-duplex のプロトコル層ではありません
+- ストリーム機能は `WithStreamExperimental(true)` または `-stream-experimental` で明示的に有効化する必要があります
+
 ## Platform Tiers
 
 `purego` のサポート階層の考え方を参考にして、`go2zig` では現在のプラットフォーム対応を次のように扱います。

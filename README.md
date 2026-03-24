@@ -12,6 +12,15 @@ A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [r
 - **Builder pattern** - Generate Go wrappers and compile Zig dynamic libraries in one step
 - **Dual API style** - Both `Client` methods and top-level functions for flexible usage
 
+## Experimental Streaming
+
+`go2zig` now includes an experimental streaming bridge based on `GoReader` and `GoWriter`.
+
+- Go-side helpers currently support `io.Reader`, `io.Writer`, `io.ReadCloser`, `io.WriteCloser`, and `io.Pipe`
+- Zig side consumes stream handles synchronously through `rt.streamRead(...)` and `rt.streamWrite(...)`
+- The current implementation is a block-based, synchronous stream bridge; it is not yet an async or full-duplex protocol layer
+- Streaming must be enabled explicitly with `WithStreamExperimental(true)` or `-stream-experimental`
+
 ## Platform Tiers
 
 Borrowing the idea of support tiers from `purego`, `go2zig` currently treats platform support like this:

@@ -132,6 +132,14 @@ go run ./cmd/go2zig -api ./api.zig -out ./gen.go -pkg main -lib basic -no-build
 go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic
 ```
 
+### 実験的なストリーム機能を有効にする
+
+Zig API で `GoReader` / `GoWriter` を使う場合は、実験的ストリーム機能を明示的に有効にする必要があります。
+
+```bash
+go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib basic -stream-experimental
+```
+
 ### トップレベル転送関数を生成しない場合
 
 `Go2ZigClient` のメソッドだけを残し、`Login(...)` のようなパッケージレベルの転送関数を生成したくない場合は、次のようにします。
@@ -207,6 +215,83 @@ func main() {
 - POD slice alias は Go の `[]T` 名前付き alias を生成し、入力時の zero-copy / 出力時の copy 変換を自動で行う
 - Zig `[N]T` は Go `[N]T` array を生成し、ABI 変換を自動で行う
 - Zig `?T` は現在 Go 側では `*T` として生成される
+
+### 実験的なストリーム型
+
+現在の実験的ストリーム橋接では、予約名として次を使います。
+
+- `GoReader`
+- `GoWriter`
+
+これらはトップレベル関数の引数としてのみ使用でき、次の場所では使えません。
+
+- 戻り値
+- `extern struct` のフィールド
+- `optional`
+- `slice`
+- `array`
+
+Zig API では明示的に宣言してください。
+
+```zig
+pub const GoReader = usize;
+pub const GoWriter = usize;
+
+pub extern fn copy_stream(reader: GoReader, writer: GoWriter) u64;
+```
+
+Zig 側では `go2zig_runtime.zig` の helper を使います。
+
+```zig
+const rt = @import("go2zig_runtime.zig");
+
+pub fn copy_stream(reader: usize, writer: usize) u64 {
+    var total: u64 = 0;
+    var buf: [32]u8 = undefined;
+    while (true) {
+        const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => @panic("stream read failed"),
+        };
+        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
+        total += @as(u64, @intCast(written));
+    }
+    return total;
+}
+```
+
+Go 側では、生成される helper を使って標準的なストリーム値を包みます。
+
+```go
+reader, err := NewGoReader(strings.NewReader("hello"))
+if err != nil {
+    panic(err)
+}
+
+var out bytes.Buffer
+writer, err := NewGoWriter(&out)
+if err != nil {
+    panic(err)
+}
+
+copied := CopyStream(reader, writer)
+_ = copied
+```
+
+現時点でラップ可能なのは次の型です。
+
+- `io.Reader`
+- `io.Writer`
+- `io.ReadCloser`
+- `io.WriteCloser`
+- `io.Pipe`
+- `*os.File`
+
+現在の制限:
+
+- 実験的機能のため、明示的に有効化する必要がある
+- 現状は同期的なブロックストリームであり、async や full-duplex のプロトコルではない
+- Zig 側には内部的にファイルハンドル相当の `usize` が渡される
 
 ## 6. 動的ライブラリのパスをカスタマイズする
 
