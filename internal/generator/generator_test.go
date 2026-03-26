@@ -252,10 +252,17 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 		"func (v GoReader) handle() uintptr",
 		"func (v GoWriter) handle() uintptr",
 		"func (c *Go2ZigClient) Consume(reader GoReader, writer GoWriter)",
+		"_ = reader.Close()",
+		"_ = writer.Close()",
 	}
 	for _, check := range checks {
 		if !strings.Contains(content, check) {
 			t.Fatalf("Render() output missing %q\n%s", check, content)
+		}
+	}
+	for _, forbidden := range []string{"if err := reader.Close(); err != nil", "if err := writer.Close(); err != nil"} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("Render() output should not contain %q\n%s", forbidden, content)
 		}
 	}
 

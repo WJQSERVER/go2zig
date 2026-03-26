@@ -4,10 +4,51 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
+
+type partialWriteCloser struct {
+	buf       bytes.Buffer
+	maxChunk  int
+	closeErr  error
+	closeCall int
+}
+
+func (w *partialWriteCloser) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	n := len(p)
+	if w.maxChunk > 0 && n > w.maxChunk {
+		n = w.maxChunk
+	}
+	return w.buf.Write(p[:n])
+}
+
+func (w *partialWriteCloser) Close() error {
+	w.closeCall++
+	return w.closeErr
+}
+
+type closeErrWriteCloser struct {
+	buf       bytes.Buffer
+	closeErr  error
+	closeCall int
+}
+
+func (w *closeErrWriteCloser) Write(p []byte) (int, error) {
+	return w.buf.Write(p)
+}
+
+func (w *closeErrWriteCloser) Close() error {
+	w.closeCall++
+	return w.closeErr
+}
 
 func TestFileHandleEncodingUsesUntaggedValues(t *testing.T) {
 	t.Parallel()
@@ -122,5 +163,74 @@ func TestCopyStreamFileHandles(t *testing.T) {
 	}
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("copied payload mismatch: got %d bytes, want %d", len(got), len(payload))
+	}
+}
+
+func TestCopyStreamHandlesPartialWrites(t *testing.T) {
+	t.Parallel()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller() failed")
+	}
+	content, err := os.ReadFile(filepath.Join(filepath.Dir(file), "lib.zig"))
+	if err != nil {
+		t.Fatalf("ReadFile(lib.zig) error = %v", err)
+	}
+	text := string(content)
+	for _, check := range []string{
+		"var pending = buf[0..n];",
+		"while (pending.len > 0)",
+		"if (written == 0) @panic(\"stream write returned zero bytes\");",
+		"pending = pending[written..];",
+	} {
+		if !strings.Contains(text, check) {
+			t.Fatalf("lib.zig missing partial-write handling %q\n%s", check, text)
+		}
+	}
+}
+
+func TestCopyStreamDoesNotPanicOnWriterCloseError(t *testing.T) {
+	t.Parallel()
+	ensureStreamLoaded(t)
+
+	reader, err := NewGoReader(strings.NewReader("close-error"))
+	if err != nil {
+		t.Fatalf("NewGoReader() error = %v", err)
+	}
+	closeErr := fmt.Errorf("close failed")
+	writerTarget := &closeErrWriteCloser{closeErr: closeErr}
+	writer, err := NewGoWriteCloser(writerTarget)
+	if err != nil {
+		t.Fatalf("NewGoWriteCloser() error = %v", err)
+	}
+
+	didPanic := false
+	func() {
+		defer func() {
+			if recover() != nil {
+				didPanic = true
+			}
+		}()
+		if n := CopyStream(reader, writer); n != uint64(len("close-error")) {
+			t.Fatalf("CopyStream() = %d, want %d", n, len("close-error"))
+		}
+	}()
+	if didPanic {
+		t.Fatal("CopyStream() panicked on writer close error")
+	}
+	if err := reader.Err(); err != nil {
+		t.Fatalf("reader.Err() error = %v", err)
+	}
+	if err := writer.Err(); err == nil {
+		t.Fatal("writer.Err() = nil, want close error")
+	} else if !strings.Contains(err.Error(), closeErr.Error()) {
+		t.Fatalf("writer.Err() = %v, want close error %q", err, closeErr)
+	}
+	if got, want := writerTarget.buf.String(), "close-error"; got != want {
+		t.Fatalf("partial writer payload = %q, want %q", got, want)
+	}
+	if writerTarget.closeCall != 1 {
+		t.Fatalf("writer close calls = %d, want 1", writerTarget.closeCall)
 	}
 }

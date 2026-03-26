@@ -261,6 +261,10 @@ func (s *_go2zigStreamState) close(ignoreErr bool) error {
 	}
 	err := s.wait()
 	if closeErr != nil {
+		if err == nil {
+			s.err = closeErr
+			return closeErr
+		}
 		return closeErr
 	}
 	return err
@@ -566,15 +570,11 @@ func (c *Go2ZigClient) CopyStream(reader GoReader, writer GoWriter) uint64 {
 	var frame _go2zigCallCopyStream
 	frame.reader = reader.handle()
 	defer func() {
-		if err := reader.Close(); err != nil {
-			panic(err)
-		}
+		_ = reader.Close()
 	}()
 	frame.writer = writer.handle()
 	defer func() {
-		if err := writer.Close(); err != nil {
-			panic(err)
-		}
+		_ = writer.Close()
 	}()
 	c.rt.call(c.rt.procCopyStream, unsafe.Pointer(&frame))
 	runtime.KeepAlive(reader)

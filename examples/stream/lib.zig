@@ -9,8 +9,13 @@ pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) u64 {
             error.EndOfStream => break,
             else => @panic("stream read failed"),
         };
-        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
-        total += @as(u64, @intCast(written));
+        var pending = buf[0..n];
+        while (pending.len > 0) {
+            const written = rt.streamWrite(writer, pending) catch @panic("stream write failed");
+            if (written == 0) @panic("stream write returned zero bytes");
+            total += @as(u64, @intCast(written));
+            pending = pending[written..];
+        }
     }
     return total;
 }
