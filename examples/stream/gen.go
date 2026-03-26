@@ -80,6 +80,7 @@ func (rt *_go2zigRuntime) call(proc uintptr, frame unsafe.Pointer) {
 
 type _go2zigStreamState struct {
 	file         *os.File
+	fileHandle   uintptr
 	directReader *_go2zigDirectReaderState
 	directWriter *_go2zigDirectWriterState
 	bufferTarget *bytes.Buffer
@@ -133,6 +134,25 @@ type _go2zigWriterOnly struct {
 
 type _go2zigReaderOnly struct {
 	io.Reader
+}
+
+func _go2zigEncodeFileHandle(handle uintptr) (uintptr, bool) {
+	const maxEncodedFileHandle = (^uintptr(0) >> 2) - 1
+	if handle > maxEncodedFileHandle {
+		return 0, false
+	}
+	return (handle + 1) << 2, true
+}
+
+func _go2zigNewFileStreamState(file *os.File, owned io.Closer, upstream io.Closer) (*_go2zigStreamState, error) {
+	if file == nil {
+		return &_go2zigStreamState{owned: owned, upstream: upstream}, nil
+	}
+	fileHandle, ok := _go2zigEncodeFileHandle(file.Fd())
+	if !ok {
+		return nil, fmt.Errorf("go2zig: file handle %d cannot be encoded", file.Fd())
+	}
+	return &_go2zigStreamState{file: file, fileHandle: fileHandle, owned: owned, upstream: upstream}, nil
 }
 
 func _go2zigBorrowStreamBuffer() []byte {
@@ -193,10 +213,10 @@ func (s *_go2zigStreamState) handle() uintptr {
 	if s != nil && s.directWriter != nil {
 		return uintptr(unsafe.Pointer(s.directWriter)) | _go2zigStreamHandleDirectWriter
 	}
-	if s == nil || s.file == nil {
-		return 0
+	if s != nil && s.fileHandle != 0 {
+		return s.fileHandle
 	}
-	return s.file.Fd()
+	return 0
 }
 
 func (s *_go2zigStreamState) wait() error {
@@ -289,9 +309,9 @@ func newGoReader(reader io.Reader, upstream io.Closer) (GoReader, error) {
 		return GoReader{state: state}, nil
 	}
 	if file, ok := reader.(*os.File); ok {
-		state := &_go2zigStreamState{file: file}
-		if upstream != nil {
-			state.owned = upstream
+		state, err := _go2zigNewFileStreamState(file, upstream, nil)
+		if err != nil {
+			return GoReader{}, err
 		}
 		return GoReader{state: state}, nil
 	}
@@ -299,7 +319,12 @@ func newGoReader(reader io.Reader, upstream io.Closer) (GoReader, error) {
 	if err != nil {
 		return GoReader{}, err
 	}
-	state := &_go2zigStreamState{file: pr, owned: pr, upstream: upstream}
+	state, err := _go2zigNewFileStreamState(pr, pr, upstream)
+	if err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		return GoReader{}, err
+	}
 	state.copyWG.Add(1)
 	go func() {
 		_, err := _go2zigCopyToPipe(pw, reader)
@@ -343,9 +368,9 @@ func newGoWriter(writer io.Writer, upstream io.Closer) (GoWriter, error) {
 		return GoWriter{state: state}, nil
 	}
 	if file, ok := writer.(*os.File); ok {
-		state := &_go2zigStreamState{file: file}
-		if upstream != nil {
-			state.owned = upstream
+		state, err := _go2zigNewFileStreamState(file, upstream, nil)
+		if err != nil {
+			return GoWriter{}, err
 		}
 		return GoWriter{state: state}, nil
 	}
@@ -353,7 +378,12 @@ func newGoWriter(writer io.Writer, upstream io.Closer) (GoWriter, error) {
 	if err != nil {
 		return GoWriter{}, err
 	}
-	state := &_go2zigStreamState{file: pw, owned: pw, upstream: upstream}
+	state, err := _go2zigNewFileStreamState(pw, pw, upstream)
+	if err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		return GoWriter{}, err
+	}
 	state.copyWG.Add(1)
 	go func() {
 		_, err := _go2zigCopyToWriter(writer, pr)

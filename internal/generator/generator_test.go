@@ -230,6 +230,7 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 		"type GoReader struct",
 		"type GoWriter struct",
 		"file         *os.File",
+		"fileHandle   uintptr",
 		"directReader *_go2zigDirectReaderState",
 		"directWriter *_go2zigDirectWriterState",
 		"bufferTarget *bytes.Buffer",
@@ -246,6 +247,8 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 		"func (v GoWriter) Close() error",
 		"func (v GoReader) Err() error",
 		"func (v GoWriter) Err() error",
+		"func _go2zigEncodeFileHandle(handle uintptr) (uintptr, bool)",
+		"func _go2zigNewFileStreamState(file *os.File, owned io.Closer, upstream io.Closer) (*_go2zigStreamState, error)",
 		"func (v GoReader) handle() uintptr",
 		"func (v GoWriter) handle() uintptr",
 		"func (c *Go2ZigClient) Consume(reader GoReader, writer GoWriter)",
@@ -257,7 +260,7 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 	}
 
 	runtimeText := string(RenderZigRuntime(api, Config{APIModule: "api.zig", StreamExperimental: true}))
-	for _, check := range []string{"inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle", "const stream_handle_direct_reader: usize = 0x1;", "const DirectReaderState = extern struct", "const DirectWriterState = extern struct", "pub fn streamRead(reader: usize, buffer: []u8)", "pub fn streamWrite(writer: usize, buffer: []const u8)", "std.fs.File = .{ .handle = streamHandleFromUsize(reader) }"} {
+	for _, check := range []string{"inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle", "inline fn streamHandleFromEncoded(value: usize) std.fs.File.Handle", "const stream_handle_direct_reader: usize = 0x1;", "const DirectReaderState = extern struct", "const DirectWriterState = extern struct", "pub fn streamRead(reader: usize, buffer: []u8)", "pub fn streamWrite(writer: usize, buffer: []const u8)", "std.fs.File = .{ .handle = streamHandleFromEncoded(reader) }"} {
 		if !strings.Contains(runtimeText, check) {
 			t.Fatalf("RenderZigRuntime() missing %q\n%s", check, runtimeText)
 		}

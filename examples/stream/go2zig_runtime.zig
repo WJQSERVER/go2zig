@@ -64,6 +64,10 @@ inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle {
     };
 }
 
+inline fn streamHandleFromEncoded(value: usize) std.fs.File.Handle {
+    return streamHandleFromUsize((value >> 2) - 1);
+}
+
 inline fn directReaderStateFromHandle(value: usize) *DirectReaderState {
     return @ptrFromInt(value & ~stream_handle_mask);
 }
@@ -74,7 +78,8 @@ inline fn directWriterStateFromHandle(value: usize) *DirectWriterState {
 
 pub fn streamRead(reader: usize, buffer: []u8) error{StreamReadFailed, EndOfStream}!usize {
     if (reader == 0) return error.StreamReadFailed;
-    if ((reader & stream_handle_mask) == stream_handle_direct_reader) {
+    const tag = reader & stream_handle_mask;
+    if (tag == stream_handle_direct_reader) {
         const state = directReaderStateFromHandle(reader);
         if (state.ptr == null or state.pos >= state.len) return error.EndOfStream;
         const remaining = state.len - state.pos;
@@ -84,7 +89,8 @@ pub fn streamRead(reader: usize, buffer: []u8) error{StreamReadFailed, EndOfStre
         state.pos += n;
         return n;
     }
-    const file: std.fs.File = .{ .handle = streamHandleFromUsize(reader) };
+    if (tag != 0) return error.StreamReadFailed;
+    const file: std.fs.File = .{ .handle = streamHandleFromEncoded(reader) };
     const n = file.read(buffer) catch { return error.StreamReadFailed; };
     if (n == 0) return error.EndOfStream;
     return n;
@@ -92,7 +98,8 @@ pub fn streamRead(reader: usize, buffer: []u8) error{StreamReadFailed, EndOfStre
 
 pub fn streamWrite(writer: usize, buffer: []const u8) error{StreamWriteFailed}!usize {
     if (writer == 0) return error.StreamWriteFailed;
-    if ((writer & stream_handle_mask) == stream_handle_direct_writer) {
+    const tag = writer & stream_handle_mask;
+    if (tag == stream_handle_direct_writer) {
         const state = directWriterStateFromHandle(writer);
         if (state.ptr == null or state.len > state.cap) return error.StreamWriteFailed;
         const available = state.cap - state.len;
@@ -102,7 +109,8 @@ pub fn streamWrite(writer: usize, buffer: []const u8) error{StreamWriteFailed}!u
         state.len += buffer.len;
         return buffer.len;
     }
-    const file: std.fs.File = .{ .handle = streamHandleFromUsize(writer) };
+    if (tag != 0) return error.StreamWriteFailed;
+    const file: std.fs.File = .{ .handle = streamHandleFromEncoded(writer) };
     return file.write(buffer) catch { return error.StreamWriteFailed; };
 }
 
