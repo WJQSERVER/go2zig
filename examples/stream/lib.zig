@@ -3,7 +3,7 @@ const rt = @import("go2zig_runtime.zig");
 
 pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) u64 {
     var total: u64 = 0;
-    var buf: [4096]u8 = undefined;
+    var buf: [65536]u8 = undefined;
     while (true) {
         const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
             error.EndOfStream => break,

@@ -10,10 +10,12 @@ import (
 	"sync"
 	"unsafe"
 
+	"bytes"
 	"go2zig/asmcall"
 	"go2zig/dynlib"
 	"io"
 	"os"
+	"strings"
 )
 
 type Go2ZigClient struct {
@@ -77,16 +79,120 @@ func (rt *_go2zigRuntime) call(proc uintptr, frame unsafe.Pointer) {
 }
 
 type _go2zigStreamState struct {
-	file      *os.File
-	owned     io.Closer
-	upstream  io.Closer
-	done      chan error
-	closeOnce sync.Once
-	waitOnce  sync.Once
-	err       error
+	file         *os.File
+	directReader *_go2zigDirectReaderState
+	directWriter *_go2zigDirectWriterState
+	bufferTarget *bytes.Buffer
+	owned        io.Closer
+	upstream     io.Closer
+	copyWG       sync.WaitGroup
+	closeOnce    sync.Once
+	err          error
+}
+
+const (
+	_go2zigStreamHandleMask         = uintptr(0x3)
+	_go2zigStreamHandleDirectReader = uintptr(0x1)
+	_go2zigStreamHandleDirectWriter = uintptr(0x2)
+)
+
+type _go2zigDirectReaderState struct {
+	ptr unsafe.Pointer
+	len uintptr
+	pos uintptr
+}
+
+type _go2zigDirectWriterState struct {
+	ptr unsafe.Pointer
+	len uintptr
+	cap uintptr
+}
+
+type _go2zigBytesReaderView struct {
+	s        []byte
+	i        int64
+	prevRune int
+}
+
+type _go2zigBytesBufferView struct {
+	buf []byte
+	off int
+}
+
+type _go2zigStringsReaderView struct {
+	s        string
+	i        int64
+	prevRune int
+}
+
+var _go2zigStreamBufferPool = sync.Pool{New: func() any { return make([]byte, 64<<10) }}
+
+type _go2zigWriterOnly struct {
+	io.Writer
+}
+
+type _go2zigReaderOnly struct {
+	io.Reader
+}
+
+func _go2zigBorrowStreamBuffer() []byte {
+	return _go2zigStreamBufferPool.Get().([]byte)
+}
+
+func _go2zigReleaseStreamBuffer(buf []byte) {
+	if cap(buf) == 0 {
+		return
+	}
+	_go2zigStreamBufferPool.Put(buf[:cap(buf)])
+}
+
+func _go2zigCopyToPipe(dst io.Writer, src io.Reader) (int64, error) {
+	buf := _go2zigBorrowStreamBuffer()
+	defer _go2zigReleaseStreamBuffer(buf)
+	return io.CopyBuffer(dst, src, buf)
+}
+
+func _go2zigCopyToWriter(dst io.Writer, src io.Reader) (int64, error) {
+	buf := _go2zigBorrowStreamBuffer()
+	defer _go2zigReleaseStreamBuffer(buf)
+	if _, ok := dst.(*bytes.Buffer); ok {
+		return io.CopyBuffer(_go2zigWriterOnly{Writer: dst}, src, buf)
+	}
+	return io.CopyBuffer(dst, _go2zigReaderOnly{Reader: src}, buf)
+}
+
+func _go2zigMakeDirectReaderState(view []byte) *_go2zigDirectReaderState {
+	state := &_go2zigDirectReaderState{len: uintptr(len(view))}
+	if len(view) > 0 {
+		state.ptr = unsafe.Pointer(unsafe.SliceData(view))
+	}
+	return state
+}
+
+func _go2zigBytesReaderViewOf(reader *bytes.Reader) []byte {
+	state := (*_go2zigBytesReaderView)(unsafe.Pointer(reader))
+	if state.i >= int64(len(state.s)) {
+		return nil
+	}
+	return state.s[state.i:]
+}
+
+func _go2zigStringsReaderViewOf(reader *strings.Reader) []byte {
+	state := (*_go2zigStringsReaderView)(unsafe.Pointer(reader))
+	if state.i >= int64(len(state.s)) {
+		return nil
+	}
+	remaining := state.s[state.i:]
+	return unsafe.Slice(unsafe.StringData(remaining), len(remaining))
 }
 
 func (s *_go2zigStreamState) handle() uintptr {
+	if s != nil && s.directReader != nil {
+		return uintptr(unsafe.Pointer(s.directReader)) | _go2zigStreamHandleDirectReader
+	}
+	if s != nil && s.directWriter != nil {
+		return uintptr(unsafe.Pointer(s.directWriter)) | _go2zigStreamHandleDirectWriter
+	}
 	if s == nil || s.file == nil {
 		return 0
 	}
@@ -94,12 +200,10 @@ func (s *_go2zigStreamState) handle() uintptr {
 }
 
 func (s *_go2zigStreamState) wait() error {
-	if s == nil || s.done == nil {
+	if s == nil {
 		return nil
 	}
-	s.waitOnce.Do(func() {
-		s.err = <-s.done
-	})
+	s.copyWG.Wait()
 	return s.err
 }
 
@@ -109,6 +213,14 @@ func (s *_go2zigStreamState) closeOwned() error {
 	}
 	var err error
 	s.closeOnce.Do(func() {
+		if s.directWriter != nil && s.bufferTarget != nil {
+			view := (*_go2zigBytesBufferView)(unsafe.Pointer(s.bufferTarget))
+			if int(s.directWriter.len) > cap(view.buf) {
+				err = fmt.Errorf("go2zig: direct writer overflow len=%d cap=%d", s.directWriter.len, cap(view.buf))
+				return
+			}
+			view.buf = view.buf[:int(s.directWriter.len)]
+		}
 		if s.owned != nil {
 			err = s.owned.Close()
 		}
@@ -124,14 +236,7 @@ func (s *_go2zigStreamState) close(ignoreErr bool) error {
 	if s.upstream != nil && closeErr != nil {
 		closeErr = nil
 	}
-	if s.done == nil {
-		if ignoreErr {
-			return nil
-		}
-		return closeErr
-	}
 	if ignoreErr {
-		go func() { _ = s.wait() }()
 		return nil
 	}
 	err := s.wait()
@@ -161,6 +266,28 @@ func newGoReader(reader io.Reader, upstream io.Closer) (GoReader, error) {
 	if reader == nil {
 		return GoReader{}, fmt.Errorf("go2zig: reader is nil")
 	}
+	if bytesReader, ok := reader.(*bytes.Reader); ok {
+		state := &_go2zigStreamState{directReader: _go2zigMakeDirectReaderState(_go2zigBytesReaderViewOf(bytesReader))}
+		if upstream != nil {
+			state.owned = upstream
+		}
+		return GoReader{state: state}, nil
+	}
+	if stringsReader, ok := reader.(*strings.Reader); ok {
+		state := &_go2zigStreamState{directReader: _go2zigMakeDirectReaderState(_go2zigStringsReaderViewOf(stringsReader))}
+		if upstream != nil {
+			state.owned = upstream
+		}
+		return GoReader{state: state}, nil
+	}
+	if buffer, ok := reader.(*bytes.Buffer); ok {
+		view := buffer.Bytes()
+		state := &_go2zigStreamState{directReader: _go2zigMakeDirectReaderState(view)}
+		if upstream != nil {
+			state.owned = upstream
+		}
+		return GoReader{state: state}, nil
+	}
 	if file, ok := reader.(*os.File); ok {
 		state := &_go2zigStreamState{file: file}
 		if upstream != nil {
@@ -172,9 +299,10 @@ func newGoReader(reader io.Reader, upstream io.Closer) (GoReader, error) {
 	if err != nil {
 		return GoReader{}, err
 	}
-	state := &_go2zigStreamState{file: pr, owned: pr, upstream: upstream, done: make(chan error, 1)}
+	state := &_go2zigStreamState{file: pr, owned: pr, upstream: upstream}
+	state.copyWG.Add(1)
 	go func() {
-		_, err := io.Copy(pw, reader)
+		_, err := _go2zigCopyToPipe(pw, reader)
 		if closeErr := pw.Close(); err == nil {
 			err = closeErr
 		}
@@ -183,7 +311,8 @@ func newGoReader(reader io.Reader, upstream io.Closer) (GoReader, error) {
 				err = closeErr
 			}
 		}
-		state.done <- err
+		state.err = err
+		state.copyWG.Done()
 	}()
 	return GoReader{state: state}, nil
 }
@@ -200,6 +329,19 @@ func newGoWriter(writer io.Writer, upstream io.Closer) (GoWriter, error) {
 	if writer == nil {
 		return GoWriter{}, fmt.Errorf("go2zig: writer is nil")
 	}
+	if buffer, ok := writer.(*bytes.Buffer); ok {
+		buffer.Grow(64 << 10)
+		view := (*_go2zigBytesBufferView)(unsafe.Pointer(buffer))
+		ptr := unsafe.Pointer(nil)
+		if cap(view.buf) > 0 {
+			ptr = unsafe.Pointer(unsafe.SliceData(view.buf[:cap(view.buf)]))
+		}
+		state := &_go2zigStreamState{bufferTarget: buffer, directWriter: &_go2zigDirectWriterState{ptr: ptr, len: uintptr(len(view.buf)), cap: uintptr(cap(view.buf))}}
+		if upstream != nil {
+			state.owned = upstream
+		}
+		return GoWriter{state: state}, nil
+	}
 	if file, ok := writer.(*os.File); ok {
 		state := &_go2zigStreamState{file: file}
 		if upstream != nil {
@@ -211,9 +353,10 @@ func newGoWriter(writer io.Writer, upstream io.Closer) (GoWriter, error) {
 	if err != nil {
 		return GoWriter{}, err
 	}
-	state := &_go2zigStreamState{file: pw, owned: pw, upstream: upstream, done: make(chan error, 1)}
+	state := &_go2zigStreamState{file: pw, owned: pw, upstream: upstream}
+	state.copyWG.Add(1)
 	go func() {
-		_, err := io.Copy(writer, pr)
+		_, err := _go2zigCopyToWriter(writer, pr)
 		if closeErr := pr.Close(); err == nil {
 			err = closeErr
 		}
@@ -222,7 +365,8 @@ func newGoWriter(writer io.Writer, upstream io.Closer) (GoWriter, error) {
 				err = closeErr
 			}
 		}
-		state.done <- err
+		state.err = err
+		state.copyWG.Done()
 	}()
 	return GoWriter{state: state}, nil
 }

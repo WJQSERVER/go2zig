@@ -41,6 +41,22 @@ pub fn okError() ErrorInfo {
     return .{ .code = 0, .text = .{ .ptr = undefined, .len = 0 } };
 }
 
+const stream_handle_mask: usize = 0x3;
+const stream_handle_direct_reader: usize = 0x1;
+const stream_handle_direct_writer: usize = 0x2;
+
+const DirectReaderState = extern struct {
+    ptr: ?*const anyopaque,
+    len: usize,
+    pos: usize,
+};
+
+const DirectWriterState = extern struct {
+    ptr: ?*anyopaque,
+    len: usize,
+    cap: usize,
+};
+
 inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle {
     return switch (@typeInfo(std.fs.File.Handle)) {
         .pointer => @as(std.fs.File.Handle, @ptrFromInt(value)),
@@ -48,8 +64,26 @@ inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle {
     };
 }
 
+inline fn directReaderStateFromHandle(value: usize) *DirectReaderState {
+    return @ptrFromInt(value & ~stream_handle_mask);
+}
+
+inline fn directWriterStateFromHandle(value: usize) *DirectWriterState {
+    return @ptrFromInt(value & ~stream_handle_mask);
+}
+
 pub fn streamRead(reader: usize, buffer: []u8) error{StreamReadFailed, EndOfStream}!usize {
     if (reader == 0) return error.StreamReadFailed;
+    if ((reader & stream_handle_mask) == stream_handle_direct_reader) {
+        const state = directReaderStateFromHandle(reader);
+        if (state.ptr == null or state.pos >= state.len) return error.EndOfStream;
+        const remaining = state.len - state.pos;
+        const n = @min(buffer.len, remaining);
+        const src = @as([*]const u8, @ptrCast(state.ptr.?))[state.pos..][0..n];
+        @memcpy(buffer[0..n], src);
+        state.pos += n;
+        return n;
+    }
     const file: std.fs.File = .{ .handle = streamHandleFromUsize(reader) };
     const n = file.read(buffer) catch { return error.StreamReadFailed; };
     if (n == 0) return error.EndOfStream;
@@ -58,6 +92,16 @@ pub fn streamRead(reader: usize, buffer: []u8) error{StreamReadFailed, EndOfStre
 
 pub fn streamWrite(writer: usize, buffer: []const u8) error{StreamWriteFailed}!usize {
     if (writer == 0) return error.StreamWriteFailed;
+    if ((writer & stream_handle_mask) == stream_handle_direct_writer) {
+        const state = directWriterStateFromHandle(writer);
+        if (state.ptr == null or state.len > state.cap) return error.StreamWriteFailed;
+        const available = state.cap - state.len;
+        if (buffer.len > available) return error.StreamWriteFailed;
+        const dst = @as([*]u8, @ptrCast(state.ptr.?))[state.len..][0..buffer.len];
+        @memcpy(dst, buffer);
+        state.len += buffer.len;
+        return buffer.len;
+    }
     const file: std.fs.File = .{ .handle = streamHandleFromUsize(writer) };
     return file.write(buffer) catch { return error.StreamWriteFailed; };
 }

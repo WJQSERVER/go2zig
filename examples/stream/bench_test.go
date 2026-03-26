@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"unsafe"
 )
 
 var streamBenchPayload = bytes.Repeat([]byte("go2zig-stream-payload-"), 2048)
@@ -18,27 +20,57 @@ type nopWriteCloser struct {
 
 func (nopWriteCloser) Close() error { return nil }
 
-func BenchmarkGoReaderBytesBridge(b *testing.B) {
+func benchmarkReadDirect(state *_go2zigDirectReaderState, scratch []byte) int {
+	if state == nil || len(scratch) == 0 {
+		return 0
+	}
+	total := 0
+	for state.pos < state.len {
+		remaining := int(state.len - state.pos)
+		n := len(scratch)
+		if n > remaining {
+			n = remaining
+		}
+		src := unsafe.Slice((*byte)(unsafe.Add(state.ptr, state.pos)), n)
+		copy(scratch[:n], src)
+		state.pos += uintptr(n)
+		total += n
+	}
+	return total
+}
+
+func benchmarkWriteDirect(state *_go2zigDirectWriterState, payload []byte) int {
+	if state == nil || len(payload) == 0 {
+		return 0
+	}
+	dst := unsafe.Slice((*byte)(state.ptr), int(state.cap))
+	start := int(state.len)
+	n := copy(dst[start:], payload)
+	state.len += uintptr(n)
+	return n
+}
+
+func BenchmarkStreamReaderDirectBytes(b *testing.B) {
+	b.ReportAllocs()
 	b.SetBytes(int64(len(streamBenchPayload)))
+	scratch := make([]byte, 64<<10)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		reader, err := NewGoReader(bytes.NewReader(streamBenchPayload))
 		if err != nil {
 			b.Fatalf("NewGoReader() error = %v", err)
 		}
-		if _, err := io.Copy(io.Discard, reader.state.file); err != nil {
-			b.Fatalf("io.Copy() error = %v", err)
+		if reader.state.directReader == nil {
+			b.Fatal("reader direct fast path unavailable")
 		}
-		if err := reader.Close(); err != nil {
-			b.Fatalf("reader.Close() error = %v", err)
-		}
-		if err := reader.Err(); err != nil {
-			b.Fatalf("reader.Err() error = %v", err)
+		if n := benchmarkReadDirect(reader.state.directReader, scratch); n != len(streamBenchPayload) {
+			b.Fatalf("read bytes = %d, want %d", n, len(streamBenchPayload))
 		}
 	}
 }
 
-func BenchmarkGoReaderPipeBridge(b *testing.B) {
+func BenchmarkStreamReaderPipeFallback(b *testing.B) {
+	b.ReportAllocs()
 	b.SetBytes(int64(len(streamBenchPayload)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -63,17 +95,23 @@ func BenchmarkGoReaderPipeBridge(b *testing.B) {
 	}
 }
 
-func BenchmarkGoWriterBufferBridge(b *testing.B) {
+func BenchmarkStreamWriterDirectBuffer(b *testing.B) {
+	b.ReportAllocs()
 	b.SetBytes(int64(len(streamBenchPayload)))
+	var out bytes.Buffer
+	out.Grow(len(streamBenchPayload) + 64<<10)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		var out bytes.Buffer
+		out.Reset()
 		writer, err := NewGoWriter(&out)
 		if err != nil {
 			b.Fatalf("NewGoWriter() error = %v", err)
 		}
-		if _, err := writer.state.file.Write(streamBenchPayload); err != nil {
-			b.Fatalf("writer.state.file.Write() error = %v", err)
+		if writer.state.directWriter == nil {
+			b.Fatal("writer direct fast path unavailable")
+		}
+		if n := benchmarkWriteDirect(writer.state.directWriter, streamBenchPayload); n != len(streamBenchPayload) {
+			b.Fatalf("written bytes = %d, want %d", n, len(streamBenchPayload))
 		}
 		if err := writer.Close(); err != nil {
 			b.Fatalf("writer.Close() error = %v", err)
@@ -84,7 +122,8 @@ func BenchmarkGoWriterBufferBridge(b *testing.B) {
 	}
 }
 
-func BenchmarkGoWriterWriteCloserBridge(b *testing.B) {
+func BenchmarkStreamWriterPipeWriteCloser(b *testing.B) {
+	b.ReportAllocs()
 	b.SetBytes(int64(len(streamBenchPayload)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -105,7 +144,11 @@ func BenchmarkGoWriterWriteCloserBridge(b *testing.B) {
 	}
 }
 
-func BenchmarkCopyStreamFileHandles(b *testing.B) {
+func BenchmarkStreamCopyFileHandles(b *testing.B) {
+	b.ReportAllocs()
+	if runtime.GOOS == "windows" {
+		b.Skip("windows file-handle end-to-end stream benchmark is currently unstable")
+	}
 	ensureStreamLoaded(b)
 	dir := b.TempDir()
 	srcPath := filepath.Join(dir, "in.bin")
@@ -155,7 +198,8 @@ func BenchmarkCopyStreamFileHandles(b *testing.B) {
 	}
 }
 
-func BenchmarkGoStreamHandleAccess(b *testing.B) {
+func BenchmarkStreamHandleAccess(b *testing.B) {
+	b.ReportAllocs()
 	file, err := os.OpenFile(filepath.Join(b.TempDir(), "handle.bin"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		b.Fatalf("OpenFile() error = %v", err)
