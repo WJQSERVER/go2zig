@@ -42,6 +42,32 @@ func TestFileHandleEncodingUsesUntaggedValues(t *testing.T) {
 	}
 }
 
+func TestEnsureStreamLoadedKeepsLoadedRuntime(t *testing.T) {
+	ensureStreamLoaded(t)
+
+	if Default == nil || Default.rt == nil {
+		t.Fatal("Default runtime is nil after ensureStreamLoaded")
+	}
+	if Default.rt.procCopyStream == 0 {
+		t.Fatal("procCopyStream = 0 after ensureStreamLoaded")
+	}
+
+	beforeClient := Default
+	beforeRuntime := Default.rt
+
+	ensureStreamLoaded(t)
+
+	if Default != beforeClient {
+		t.Fatal("ensureStreamLoaded replaced the default client")
+	}
+	if Default.rt != beforeRuntime {
+		t.Fatal("ensureStreamLoaded replaced the loaded runtime")
+	}
+	if Default.rt.procCopyStream == 0 {
+		t.Fatal("procCopyStream = 0 after repeated ensureStreamLoaded")
+	}
+}
+
 func TestCopyStreamFileHandles(t *testing.T) {
 	t.Parallel()
 	ensureStreamLoaded(t)

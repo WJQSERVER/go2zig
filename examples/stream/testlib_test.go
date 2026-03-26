@@ -16,8 +16,6 @@ var (
 	prepareRuntimePath string
 	prepareRuntimeSkip string
 	prepareRuntimeErr  error
-	loadRuntimeOnce    sync.Once
-	loadRuntimeErr     error
 )
 
 func prepareStreamRuntime(tb testing.TB) {
@@ -47,6 +45,7 @@ func prepareStreamRuntime(tb testing.TB) {
 		}
 
 		prepareRuntimePath = libPath
+		Default = NewGo2ZigClient(prepareRuntimePath)
 	})
 	if prepareRuntimeSkip != "" {
 		tb.Skip(prepareRuntimeSkip)
@@ -54,16 +53,12 @@ func prepareStreamRuntime(tb testing.TB) {
 	if prepareRuntimeErr != nil {
 		tb.Fatal(prepareRuntimeErr)
 	}
-	Default = NewGo2ZigClient(prepareRuntimePath)
 }
 
 func ensureStreamLoaded(tb testing.TB) {
 	tb.Helper()
 	prepareStreamRuntime(tb)
-	loadRuntimeOnce.Do(func() {
-		loadRuntimeErr = Default.Load()
-	})
-	if loadRuntimeErr != nil {
-		tb.Fatalf("Load() error = %v", loadRuntimeErr)
+	if err := Default.Load(); err != nil {
+		tb.Fatalf("Load() error = %v", err)
 	}
 }
