@@ -620,22 +620,29 @@ pub const Bytes = extern struct {
 pub const GoReader = usize;
 pub const GoWriter = usize;
 
-pub extern fn copy_stream(reader: GoReader, writer: GoWriter) u64;
+pub const CopyStreamError = error{ StreamReadFailed, StreamWriteFailed };
+
+pub extern fn copy_stream(reader: GoReader, writer: GoWriter) CopyStreamError!u64;
 `)
 	writeFile(t, filepath.Join(dir, "lib.zig"), `
 const api = @import("api.zig");
 const rt = @import("go2zig_runtime.zig");
 
-pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) u64 {
+pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) api.CopyStreamError!u64 {
     var total: u64 = 0;
     var buf: [32]u8 = undefined;
     while (true) {
         const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
             error.EndOfStream => break,
-            else => @panic("stream read failed"),
+            else => return error.StreamReadFailed,
         };
-        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
-        total += @as(u64, @intCast(written));
+        var pending = buf[0..n];
+        while (pending.len > 0) {
+            const written = rt.streamWrite(writer, pending) catch return error.StreamWriteFailed;
+            if (written == 0) return error.StreamWriteFailed;
+            total += @as(u64, @intCast(written));
+            pending = pending[written..];
+        }
     }
     return total;
 }
@@ -703,7 +710,9 @@ func main() {
 	if err != nil { panic(err) }
 	out1, err := os.Create("out1.txt")
 	if err != nil { panic(err) }
-	if n := CopyStream(mustReader(NewGoReader(in1)), mustWriter(NewGoWriter(out1))); n != 5 {
+	n, err := CopyStream(mustReader(NewGoReader(in1)), mustWriter(NewGoWriter(out1)))
+	if err != nil { panic(err) }
+	if n != 5 {
 		panic(fmt.Sprintf("copy1=%d", n))
 	}
 
@@ -711,7 +720,9 @@ func main() {
 	if err != nil { panic(err) }
 	out2, err := os.Create("out2.txt")
 	if err != nil { panic(err) }
-	if n := CopyStream(mustReader(NewGoReadCloser(in2)), mustWriter(NewGoWriteCloser(out2))); n != 4 {
+	n, err = CopyStream(mustReader(NewGoReadCloser(in2)), mustWriter(NewGoWriteCloser(out2)))
+	if err != nil { panic(err) }
+	if n != 4 {
 		panic(fmt.Sprintf("copy2=%d", n))
 	}
 
@@ -719,7 +730,9 @@ func main() {
 	if err != nil { panic(err) }
 	out3, err := os.Create("out3.txt")
 	if err != nil { panic(err) }
-	if n := CopyStream(mustReader(NewGoReadCloser(in3)), mustWriter(NewGoWriter(out3))); n != 5 {
+	n, err = CopyStream(mustReader(NewGoReadCloser(in3)), mustWriter(NewGoWriter(out3)))
+	if err != nil { panic(err) }
+	if n != 5 {
 		panic(fmt.Sprintf("copy3=%d", n))
 	}
 
@@ -770,22 +783,29 @@ pub const Bytes = extern struct {
 pub const GoReader = usize;
 pub const GoWriter = usize;
 
-pub extern fn copy_stream(reader: GoReader, writer: GoWriter) u64;
+pub const CopyStreamError = error{ StreamReadFailed, StreamWriteFailed };
+
+pub extern fn copy_stream(reader: GoReader, writer: GoWriter) CopyStreamError!u64;
 `)
 	writeFile(t, filepath.Join(dir, "lib.zig"), `
 const api = @import("api.zig");
 const rt = @import("go2zig_runtime.zig");
 
-pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) u64 {
+pub fn copy_stream(reader: api.GoReader, writer: api.GoWriter) api.CopyStreamError!u64 {
     var total: u64 = 0;
     var buf: [16]u8 = undefined;
     while (true) {
         const n = rt.streamRead(reader, buf[0..]) catch |err| switch (err) {
             error.EndOfStream => break,
-            else => @panic("stream read failed"),
+            else => return error.StreamReadFailed,
         };
-        const written = rt.streamWrite(writer, buf[0..n]) catch @panic("stream write failed");
-        total += @as(u64, @intCast(written));
+        var pending = buf[0..n];
+        while (pending.len > 0) {
+            const written = rt.streamWrite(writer, pending) catch return error.StreamWriteFailed;
+            if (written == 0) return error.StreamWriteFailed;
+            total += @as(u64, @intCast(written));
+            pending = pending[written..];
+        }
     }
     return total;
 }
@@ -839,7 +859,9 @@ func main() {
 	var out bytes.Buffer
 	reader := mustReader(NewGoReadCloser(pr))
 	writer := mustWriter(NewGoWriter(&out))
-	if n := CopyStream(reader, writer); n != 7 {
+	n, err := CopyStream(reader, writer)
+	if err != nil { panic(err) }
+	if n != 7 {
 		panic(fmt.Sprintf("copy=%d", n))
 	}
 	if err := reader.Err(); err != nil {

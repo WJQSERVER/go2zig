@@ -24,7 +24,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if n := CopyStream(reader, writer); n != uint64(len(payload)) {
+	n, err := CopyStream(reader, writer)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if n != uint64(len(payload)) {
 		log.Fatalf("CopyStream() = %d, want %d", n, len(payload))
 	}
 	if err := reader.Err(); err != nil {

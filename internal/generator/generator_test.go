@@ -284,6 +284,36 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 	}
 }
 
+func TestRenderStreamErrorFunction(t *testing.T) {
+	t.Parallel()
+
+	api, err := parser.Parse(`
+        pub const CopyStreamError = error{ StreamReadFailed, StreamWriteFailed };
+        pub extern fn copy_stream(reader: GoReader, writer: GoWriter) CopyStreamError!u64;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	out, err := Render(api, Config{PackageName: "basic", LibraryName: "basic", APIModule: "api.zig", ImplModule: "lib.zig", StreamExperimental: true})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	content := string(out)
+	for _, check := range []string{"func (c *Go2ZigClient) CopyStream(reader GoReader, writer GoWriter) (uint64, error)", "if err := _go2zigOwnError(c.rt, frame.err); err != nil {", "_ = reader.Close()", "_ = writer.Close()"} {
+		if !strings.Contains(content, check) {
+			t.Fatalf("Render() output missing %q\n%s", check, content)
+		}
+	}
+
+	bridgeText := string(RenderZigBridge(api, Config{APIModule: "api.zig", ImplModule: "lib.zig", StreamExperimental: true}))
+	for _, check := range []string{"pub export fn go2zig_call_copy_stream", "err: rt.ErrorInfo", "frame.err = rt.okError();", "frame.err = rt.makeError(err);"} {
+		if !strings.Contains(bridgeText, check) {
+			t.Fatalf("RenderZigBridge() missing %q\n%s", check, bridgeText)
+		}
+	}
+}
+
 func TestRenderVoidErrorFunction(t *testing.T) {
 	t.Parallel()
 

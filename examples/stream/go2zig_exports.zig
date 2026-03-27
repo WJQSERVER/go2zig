@@ -11,10 +11,15 @@ pub const Go2ZigCallCopyStream = extern struct {
     reader: usize,
     writer: usize,
     out: u64,
+    err: rt.ErrorInfo,
 };
 
 pub export fn go2zig_call_copy_stream(frame: *Go2ZigCallCopyStream) void {
-    const result = impl.copy_stream(frame.reader, frame.writer);
+    frame.err = rt.okError();
+    const result = impl.copy_stream(frame.reader, frame.writer) catch |err| {
+        frame.err = rt.makeError(err);
+        return;
+    };
     frame.out = result;
 }
 

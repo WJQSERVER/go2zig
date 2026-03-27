@@ -564,9 +564,10 @@ type _go2zigCallCopyStream struct {
 	reader uintptr
 	writer uintptr
 	out    uint64
+	err    _go2zigError
 }
 
-func (c *Go2ZigClient) CopyStream(reader GoReader, writer GoWriter) uint64 {
+func (c *Go2ZigClient) CopyStream(reader GoReader, writer GoWriter) (uint64, error) {
 	var frame _go2zigCallCopyStream
 	frame.reader = reader.handle()
 	defer func() {
@@ -579,9 +580,13 @@ func (c *Go2ZigClient) CopyStream(reader GoReader, writer GoWriter) uint64 {
 	c.rt.call(c.rt.procCopyStream, unsafe.Pointer(&frame))
 	runtime.KeepAlive(reader)
 	runtime.KeepAlive(writer)
-	return uint64(frame.out)
+	if err := _go2zigOwnError(c.rt, frame.err); err != nil {
+		var zero uint64
+		return zero, err
+	}
+	return uint64(frame.out), nil
 }
 
-func CopyStream(reader GoReader, writer GoWriter) uint64 {
+func CopyStream(reader GoReader, writer GoWriter) (uint64, error) {
 	return Default.CopyStream(reader, writer)
 }

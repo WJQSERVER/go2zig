@@ -187,7 +187,11 @@ func BenchmarkStreamCopyFileHandles(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewGoWriter() error = %v", err)
 		}
-		if n := CopyStream(reader, writer); n != uint64(len(streamBenchPayload)) {
+		n, err := CopyStream(reader, writer)
+		if err != nil {
+			b.Fatalf("CopyStream() error = %v", err)
+		}
+		if n != uint64(len(streamBenchPayload)) {
 			b.Fatalf("CopyStream() = %d, want %d", n, len(streamBenchPayload))
 		}
 		if got, err := dst.Seek(0, io.SeekCurrent); err != nil {
