@@ -229,9 +229,16 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 	checks := []string{
 		"type GoReader struct",
 		"type GoWriter struct",
-		"file      *os.File",
-		"owned     io.Closer",
-		"upstream  io.Closer",
+		"file         *os.File",
+		"fileHandle   uintptr",
+		"directReader *_go2zigDirectReaderState",
+		"directWriter *_go2zigDirectWriterState",
+		"bufferTarget *bytes.Buffer",
+		"owned        io.Closer",
+		"upstream     io.Closer",
+		"type _go2zigBytesBufferView struct",
+		"func _go2zigBytesReaderViewOf(reader *bytes.Reader) []byte",
+		"func _go2zigStringsReaderViewOf(reader *strings.Reader) []byte",
 		"func NewGoReader(reader io.Reader) (GoReader, error)",
 		"func NewGoReadCloser(reader io.ReadCloser) (GoReader, error)",
 		"func NewGoWriter(writer io.Writer) (GoWriter, error)",
@@ -240,18 +247,27 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 		"func (v GoWriter) Close() error",
 		"func (v GoReader) Err() error",
 		"func (v GoWriter) Err() error",
+		"func _go2zigEncodeFileHandle(handle uintptr) (uintptr, bool)",
+		"func _go2zigNewFileStreamState(file *os.File, owned io.Closer, upstream io.Closer) (*_go2zigStreamState, error)",
 		"func (v GoReader) handle() uintptr",
 		"func (v GoWriter) handle() uintptr",
 		"func (c *Go2ZigClient) Consume(reader GoReader, writer GoWriter)",
+		"_ = reader.Close()",
+		"_ = writer.Close()",
 	}
 	for _, check := range checks {
 		if !strings.Contains(content, check) {
 			t.Fatalf("Render() output missing %q\n%s", check, content)
 		}
 	}
+	for _, forbidden := range []string{"if err := reader.Close(); err != nil", "if err := writer.Close(); err != nil"} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("Render() output should not contain %q\n%s", forbidden, content)
+		}
+	}
 
 	runtimeText := string(RenderZigRuntime(api, Config{APIModule: "api.zig", StreamExperimental: true}))
-	for _, check := range []string{"inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle", "pub fn streamRead(reader: usize, buffer: []u8)", "pub fn streamWrite(writer: usize, buffer: []const u8)", "std.fs.File = .{ .handle = streamHandleFromUsize(reader) }"} {
+	for _, check := range []string{"inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle", "inline fn streamHandleFromEncoded(value: usize) std.fs.File.Handle", "const stream_handle_direct_reader: usize = 0x1;", "const DirectReaderState = extern struct", "const DirectWriterState = extern struct", "pub fn streamRead(reader: usize, buffer: []u8)", "pub fn streamWrite(writer: usize, buffer: []const u8)", "std.fs.File = .{ .handle = streamHandleFromEncoded(reader) }"} {
 		if !strings.Contains(runtimeText, check) {
 			t.Fatalf("RenderZigRuntime() missing %q\n%s", check, runtimeText)
 		}
@@ -262,6 +278,36 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 		t.Fatalf("RenderZigBridge() should not emit callback bridge stream symbols in fd-based MVP\n%s", bridgeText)
 	}
 	for _, check := range []string{"pub export fn go2zig_call_consume"} {
+		if !strings.Contains(bridgeText, check) {
+			t.Fatalf("RenderZigBridge() missing %q\n%s", check, bridgeText)
+		}
+	}
+}
+
+func TestRenderStreamErrorFunction(t *testing.T) {
+	t.Parallel()
+
+	api, err := parser.Parse(`
+        pub const CopyStreamError = error{ StreamReadFailed, StreamWriteFailed };
+        pub extern fn copy_stream(reader: GoReader, writer: GoWriter) CopyStreamError!u64;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	out, err := Render(api, Config{PackageName: "basic", LibraryName: "basic", APIModule: "api.zig", ImplModule: "lib.zig", StreamExperimental: true})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	content := string(out)
+	for _, check := range []string{"func (c *Go2ZigClient) CopyStream(reader GoReader, writer GoWriter) (uint64, error)", "if err := _go2zigOwnError(c.rt, frame.err); err != nil {", "_ = reader.Close()", "_ = writer.Close()"} {
+		if !strings.Contains(content, check) {
+			t.Fatalf("Render() output missing %q\n%s", check, content)
+		}
+	}
+
+	bridgeText := string(RenderZigBridge(api, Config{APIModule: "api.zig", ImplModule: "lib.zig", StreamExperimental: true}))
+	for _, check := range []string{"pub export fn go2zig_call_copy_stream", "err: rt.ErrorInfo", "frame.err = rt.okError();", "frame.err = rt.makeError(err);"} {
 		if !strings.Contains(bridgeText, check) {
 			t.Fatalf("RenderZigBridge() missing %q\n%s", check, bridgeText)
 		}
