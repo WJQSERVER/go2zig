@@ -45,12 +45,15 @@ Related files:
 
 - `go2zig_test.go`
 - `examples/basic/example_test.go`
+- `examples/basic/edge_test.go`
+- `examples/stream/stream_test.go`
 
 Key verification:
 
 - Whether real generation flow can run through
 - Whether Zig dynamic library can be built correctly
 - Whether Go side can get correct results when calling various complex types
+- Whether the experimental stream bridge works with `io.Reader` / `io.Writer` / `io.Pipe` / `*os.File`
 
 Run:
 
@@ -93,7 +96,7 @@ A representative result from the most recent run on the development machine:
 
 ## Linux Runtime Deep Testing
 
-Linux bottom-level runtime live testing is not enabled by default in main CI.
+Linux bottom-level runtime live testing is currently enabled in the Linux CI jobs.
 
 Enable manually locally:
 
@@ -113,6 +116,12 @@ Change generator / runtime:
 
 ```bash
 go test ./internal/generator ./...
+```
+
+If your change touches low-level Linux runtime paths, it is also worth running:
+
+```bash
+GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 ```
 
 Change performance-related:

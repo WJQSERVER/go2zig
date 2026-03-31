@@ -25,10 +25,9 @@ Languages: [English](en/README.md) | [简体中文](zh/README.md) | [日本語](
 
 参考 `purego` 的支持分级思路：
 
-- **Tier 1** - CI 主验证平台：`windows/amd64`、`linux/amd64`
-- **Tier 2** - 已支持交叉构建或新启用平台：`windows/arm64`、`linux/arm64`、`darwin/arm64`
+- **Tier 1** - 当前在主 CI 中持续跑完整测试、benchmark 与构建校验的平台：`windows/amd64`、`windows/arm64`、`linux/amd64`、`linux/arm64`、`darwin/arm64`
 
-Tier 2 平台按 best-effort 模式支持，构建和生成包装优先，运行时稳定性通过后续专项测试逐步强化。
+如果后续引入新平台，通常会先走 best-effort，再进入这组主验证目标。
 
 ## 类型支持概览
 
@@ -36,7 +35,7 @@ Tier 2 平台按 best-effort 模式支持，构建和生成包装优先，运行
 - 基础类型：`bool`、`u8-u64`、`i8-i64`、`f32`、`f64`
 - 复合类型：`extern struct`、`enum(整数类型)`、固定长度数组
 - 特殊类型：`String`、`Bytes`
-- 切片别名：POD 切片（如 `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`）
+- 切片别名：命名 slice alias，包括 POD 切片以及元素为 struct 的切片别名
 - 可选类型：`?POD`（如 `?u32`、`?UserKind`）
 - 错误处理：`error{...}!ReturnType`
 
@@ -81,6 +80,7 @@ Tier 2 平台按 best-effort 模式支持，构建和生成包装优先，运行
 2. **类型限制**：不支持 Go 的 map、channel、interface 等特有类型
 3. **内存管理**：固定的分配模式，无法自定义分配器
 4. **性能开销**：每次调用需要数据复制
+5. **runtime 路径**：如果跳过显式 `Load()` 而首次调用方法时动态库加载失败，当前调用路径会直接 panic
 
 ## 后续扩展方向
 

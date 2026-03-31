@@ -1,41 +1,50 @@
 # CI Guide
 
-Current CI mainly covers:
+The current CI runs as a 5-target matrix:
 
-- Windows main path
-- Linux generation/compilation path
+- `windows/amd64`
+- `windows/arm64`
+- `linux/amd64`
+- `linux/arm64`
+- `darwin/arm64`
 
-## What CI Does
+## What Each Job Does
 
-Windows job:
+Every matrix entry does the following:
 
-- Install Go and Zig
-- Generate `examples/basic`
+- Install the Go version declared in `go.mod`
+- Install Zig `0.15.2`
+- Regenerate `examples/basic` before testing
 - Run `go test ./...`
-- Run `go test -bench . ./asmcall`
-- Run PowerShell cross-build: `$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./...`
+- Run `go test -run ^$ -bench . ./...`
+- Cross-check `go build ./...` for the matching `GOOS` / `GOARCH`
 
-Linux job:
+## Extra Linux Verification
 
-- Install Go and Zig
-- Generate `examples/basic`
-- Run `go test ./...`
-- Run `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...`
-- Run `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...`
+The Linux `amd64` and `arm64` jobs explicitly set `GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1`, so main CI already covers:
 
-## Why Linux Runtime Live Testing is Disabled by Default
+- Linux runtime execution tests in `asmcall`
+- Linux dynamic loading live tests in `dynlib`
+- Benchmarks that exercise the Linux runtime path
 
-Current no-`cgo` runtime on Linux is still in a performance-oriented low-level implementation phase.
+To reproduce the same path locally, run:
 
-To make main CI more stable, the current default strategy is:
+```bash
+GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./...
+GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./...
+```
 
-- Main CI verifies Linux path can generate, compile, and integrate build
-- Bottom-level runtime live testing is enabled manually via environment variables
+## What CI Is Trying to Validate
 
-This avoids binding all CI results to assembly call details that are still being refined.
+This matrix is mainly checking that:
 
-## Future Improvements
+- The generator still emits consistent `gen.go`, `go2zig_runtime.zig`, and `go2zig_exports.zig`
+- Build tags, dynamic library naming, and runtime loading remain correct on all supported targets
+- The basic example, stream example, integration tests, and benchmarks still run end to end
+- Changes do not break the no-`cgo` calling path
 
-- Add manually triggered Linux runtime deep verification workflow
-- Add benchmark result archiving
-- After action ecosystem stabilizes, migrate to Node 24 supported versions
+## Still Worth Improving
+
+- Archive benchmark results to make regressions easier to spot
+- Split smoke tests from full benchmarks if CI time grows further
+- Upload documentation or example artifacts for pre-release inspection

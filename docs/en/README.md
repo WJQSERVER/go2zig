@@ -25,10 +25,9 @@ Unsupported:
 
 Following the support-tier idea used by `purego`:
 
-- **Tier 1** - CI-verified primary targets: `windows/amd64`, `linux/amd64`
-- **Tier 2** - Cross-build supported or newly enabled targets: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+- **Tier 1** - Targets that currently run full tests, benchmarks, and build checks in main CI: `windows/amd64`, `windows/arm64`, `linux/amd64`, `linux/arm64`, `darwin/arm64`
 
-Tier 2 targets are supported on a best-effort basis. Buildability and generated wrapper support come first, while runtime stability is tightened progressively through targeted platform work.
+If new targets are added later, they will usually start as best-effort before moving into this main verified set.
 
 ## Type Support Overview
 
@@ -36,7 +35,7 @@ Tier 2 targets are supported on a best-effort basis. Buildability and generated 
 - Primitive types: `bool`, `u8-u64`, `i8-i64`, `f32`, `f64`
 - Composite types: `extern struct`, `enum(integer_type)`, fixed-length arrays
 - Special types: `String`, `Bytes`
-- Slice aliases: POD slices (for example `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`)
+- Slice aliases: named slice aliases, including POD slices and slice aliases whose elements are structs
 - Optional types: `?POD` (for example `?u32`, `?UserKind`)
 - Error handling: `error{...}!ReturnType`
 
@@ -81,6 +80,7 @@ The current implementation uses a fixed memory management pattern:
 2. **Type limitation**: Does not support Go-specific types like maps, channels, and interfaces
 3. **Memory management**: Uses a fixed allocation pattern and does not support custom allocators
 4. **Performance overhead**: Requires data copying for each call
+5. **Runtime loading path**: If you skip explicit `Load()` and the first lazy load fails, the current generated call path panics
 
 ## Future Directions
 

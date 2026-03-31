@@ -15,7 +15,12 @@ Usually generates:
 - `gen.go`
 - `go2zig_runtime.zig`
 - `go2zig_exports.zig`
-- `basic.dll` or `libbasic.so`
+- `basic.dll`, `libbasic.so`, or `libbasic.dylib`
+
+If you call the Go Builder programmatically with `WithDynamicBuild(false)`, the build artifact switches to a static library instead:
+
+- Windows: `basic.lib`
+- non-Windows: `libbasic.a`
 
 ## `gen.go` Responsibilities
 
@@ -56,6 +61,51 @@ Usually generates:
 - `[]struct`
 - `optional POD`
 - `error union`
+
+In practice, `slice alias` support is broader than the older “POD slice” wording suggests:
+
+- primitive / enum / array / array alias elements are supported
+- named slice aliases whose elements are structs are supported
+- structs can themselves contain POD slice fields
+
+Using `String` or `Bytes` as slice elements is still unsupported.
+
+## Actual Builder / Generate Output Behavior
+
+`Generate(...)` only does the following:
+
+- always writes the Go file
+- writes `go2zig_runtime.zig` only when `RuntimeZig` is non-empty
+- writes `go2zig_exports.zig` only when `BridgeZig` is non-empty
+
+`Builder.Build()` fills in runtime/bridge paths by default, so it usually produces all three files; if `WithZigSource(...)` is also set, it additionally:
+
+- writes `go2zig_build_root.zig`
+- invokes `zig build-lib`
+
+## Current Builder Methods
+
+Beyond the commonly documented methods, the current public Builder also exposes:
+
+- `WithHeaderOutput(path)`
+- `WithRuntimeZig(path)`
+- `WithBridgeZig(path)`
+- `WithDynamicBuild(enabled)`
+- `WithStreamExperimental(enabled)`
+- `WithAPIModuleName(name)`
+- `WithImplModule(name)`
+
+The CLI currently exposes `-header`, `-runtime-zig`, `-bridge-zig`, and `-stream-experimental`; static-library builds and custom module naming are still mainly Go-Builder features.
+
+## One Current Implementation Limitation
+
+Although Builder and `GenerateConfig` both let you customize the `RuntimeZig` output path, `go2zig_exports.zig` still hardcodes:
+
+```zig
+const rt = @import("go2zig_runtime.zig");
+```
+
+So the most reliable setup is still to keep the runtime file next to the bridge file under the default filename.
 
 ## Why Use Frame
 

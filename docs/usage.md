@@ -154,7 +154,9 @@ go run ./cmd/go2zig -api ./api.zig -zig ./lib.zig -out ./gen.go -pkg main -lib b
 - `gen.go` - Go 包装层
 - `go2zig_runtime.zig` - Zig 运行时辅助
 - `go2zig_exports.zig` - Zig 导出桥接
-- `basic.dll` 或 `libbasic.so` - 动态库
+- `basic.dll`、`libbasic.so` 或 `libbasic.dylib` - 动态库
+
+如果通过 Go Builder 以编程方式关闭动态构建（`WithDynamicBuild(false)`），则会改为产出静态库：Windows 下是 `.lib`，其他平台是 `.a`。
 
 ## 5. 在 Go 里调用
 
@@ -212,7 +214,7 @@ func main() {
 对于支持的类型：
 - Zig `enum(u8)` 会生成 Go 命名类型和对应常量
 - Zig 命名数组别名会生成 Go 命名数组类型
-- POD 切片别名会生成 Go `[]T` 命名别名，并自动做零拷贝入参 / 拷贝出参转换
+- 命名切片别名会生成 Go `[]T` 命名别名；当前不仅支持 POD 切片，也支持元素为 struct 的切片别名
 - Zig `[N]T` 会生成 Go `[N]T` 数组，并自动做 ABI 转换
 - Zig `?T` 当前会在 Go 侧生成 `*T`
 
@@ -304,6 +306,8 @@ if err := client.Load(); err != nil {
 }
 ```
 
+建议在正式调用前显式执行一次 `Load()`。当前生成方法内部虽然也会懒加载动态库，但如果首次加载失败，调用路径会直接 `panic(err)`。
+
 ## 7. 错误返回怎么工作
 
 对于 Zig `error union`，Go 侧会自动生成：
@@ -338,6 +342,16 @@ func Flush() error
 - `WithOptimize(mode)`
 - `WithTopLevelFunctions(enabled)`
 - `Build()`
+
+另外当前公开 API 还包括：
+
+- `WithHeaderOutput(path)`
+- `WithRuntimeZig(path)`
+- `WithBridgeZig(path)`
+- `WithDynamicBuild(enabled)`
+- `WithStreamExperimental(enabled)`
+- `WithAPIModuleName(name)`
+- `WithImplModule(name)`
 
 典型写法：
 
@@ -383,12 +397,15 @@ err := go2zig.NewBuilder().
 默认会从生成的 `gen.go` 所在目录旁边找：
 - Windows：`basic.dll`
 - Linux：`libbasic.so`
+- Darwin：`libbasic.dylib`
 
 如果路径不同，请用 `NewGo2ZigClient(customPath)`。
 
 ### Q2: 为什么 Linux 主 CI 不跑底层 runtime 实跑测试？
 
-因为 Linux 下这条无 `cgo` runtime 仍在持续打磨，当前主 CI 以稳定的生成、编译和集成验证为主。
+它现在已经在 Linux CI job 中运行了。主 CI 会通过 `GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1` 显式开启这组测试。
+
+这里保留原问题标题，是为了兼容你可能按旧文档关键词来查找。
 
 如果你需要本地开启 Linux runtime 深测：
 

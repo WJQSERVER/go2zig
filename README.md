@@ -17,18 +17,18 @@ A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [r
 `go2zig` now includes an experimental streaming bridge based on `GoReader` and `GoWriter`.
 
 - Go-side helpers currently support `io.Reader`, `io.Writer`, `io.ReadCloser`, `io.WriteCloser`, and `io.Pipe`
+- Go-side helpers also support `*os.File`
 - Zig side consumes stream handles synchronously through `rt.streamRead(...)` and `rt.streamWrite(...)`
 - The current implementation is a block-based, synchronous stream bridge; it is not yet an async or full-duplex protocol layer
 - Streaming must be enabled explicitly with `WithStreamExperimental(true)` or `-stream-experimental`
 
 ## Platform Tiers
 
-Borrowing the idea of support tiers from `purego`, `go2zig` currently treats platform support like this:
+Borrowing the idea of support tiers from `purego`, the current main verified set is:
 
-- **Tier 1** - CI-tested primary targets: `windows/amd64`, `linux/amd64`
-- **Tier 2** - Cross-build supported or newly enabled targets: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+- **Tier 1** - `windows/amd64`, `windows/arm64`, `linux/amd64`, `linux/arm64`, `darwin/arm64`
 
-Tier 2 targets are supported on a best-effort basis. Build and generated wrapper support are expected, while runtime edge cases may still need extra platform-specific hardening.
+These targets currently run tests, benchmarks, and build checks in main CI.
 
 ## Platform Support
 
@@ -61,7 +61,7 @@ Tier 2 targets are supported on a best-effort basis. Build and generated wrapper
 - **Structs**: `extern struct` with nested fields
 - **Enums**: `enum(integer_type)` with explicit values
 - **Arrays**: Fixed-length `[N]Type` and named aliases like `pub const Digest = [4]u8`
-- **Slices**: Named aliases like `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`
+- **Slices**: Named aliases like `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`, including aliases whose elements are structs
 - **Optionals**: `?POD` (e.g., `?u32`, `?UserKind`, `?Digest`)
 
 ### Special Types
@@ -69,7 +69,7 @@ Tier 2 targets are supported on a best-effort basis. Build and generated wrapper
 - **Bytes**: Maps to Go `[]byte` (Zig allocates, Go frees)
 
 ### Error Handling
-- **Error unions**: `error{...}!ReturnType` mapped to Go `(T, error)` or `error`
+- **Error unions**: Named or inline `error{...}!ReturnType` mapped to Go `(T, error)` or `error`
 
 ## Unsupported Types
 
@@ -85,12 +85,11 @@ Tier 2 targets are supported on a best-effort basis. Build and generated wrapper
 - `union`
 - `comptime`
 - `@import`
-- Complex error sets
 
 ### Limited Support
-- Optional types only support POD (Plain Old Data)
+- Optional support is currently centered on POD-style shapes
 - Slice elements cannot be `String` or `Bytes`
-- Nested optionals (`??T`) not supported
+- Experimental stream types (`GoReader` / `GoWriter`) can only appear as top-level function parameters
 
 ## Quick Start
 
@@ -197,7 +196,9 @@ When you run the generator, it produces:
 - `gen.go` - Go wrapper with types and functions
 - `go2zig_runtime.zig` - Zig runtime helpers
 - `go2zig_exports.zig` - Zig export bridge functions
-- `mylib.dll` / `libmylib.so` - Dynamic library
+- `mylib.dll` / `libmylib.so` / `libmylib.dylib` - Dynamic library
+
+When `Build()` also compiles Zig, it additionally writes `go2zig_build_root.zig` before invoking `zig build-lib`.
 
 ## Builder API
 
@@ -230,6 +231,8 @@ err := go2zig.NewBuilder().
 
 This keeps `Go2ZigClient` methods such as `client.Login(...)`, but skips top-level forwarding functions and helps avoid symbol collisions with hand-written wrappers.
 
+The current Builder API also includes `WithHeaderOutput`, `WithRuntimeZig`, `WithBridgeZig`, `WithDynamicBuild`, `WithStreamExperimental`, `WithAPIModuleName`, and `WithImplModule`.
+
 ## Examples
 
 See `examples/basic/` for a complete working example demonstrating:
@@ -259,7 +262,7 @@ See `examples/basic/` for a complete working example demonstrating:
 2. **Types**: No support for Go maps, channels, interfaces
 3. **Memory**: Fixed allocation pattern (Zig allocates, Go frees)
 4. **Performance**: Data copying required for each call
-5. **Error handling**: Limited to simple error sets
+5. **Runtime loading**: If you skip explicit `Load()` and the first lazy load fails, generated call paths currently panic
 
 ## Future Roadmap
 
