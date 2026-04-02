@@ -2,7 +2,7 @@
 
 Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
 
-[rust2go](https://github.com/ihciah/rust2go) に着想を得た、軽量で高性能な Go-to-Zig FFI コードジェネレータです。
+[purego](https://github.com/ebitengine/purego) と [rust2go](https://github.com/ihciah/rust2go) に着想を得た、軽量で高性能な Go-to-Zig FFI コードジェネレータです。
 
 ## Key Features
 

@@ -8,6 +8,8 @@ Languages: [English](../en/README.md) | [简体中文](README.md) | [日本語](
 - 在运行时侧尽量减少 `syscall` / `cgo` 带来的额外开销
 - 用生成器把 ABI、frame、错误协议、字符串/字节串转换统一收敛
 
+本项目参考了 [purego](https://github.com/ebitengine/purego) 的无 cgo 调用实现，以及 [rust2go](https://github.com/ihciah/rust2go) 的 FFI 代码生成设计。
+
 ## 平台支持
 
 当前支持：

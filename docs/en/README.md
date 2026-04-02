@@ -8,6 +8,8 @@ Languages: [English](README.md) | [简体中文](../zh/README.md) | [日本語](
 - Minimize extra overhead introduced by `syscall` / `cgo` at runtime
 - Use the generator to unify ABI, frame structs, error protocol, and string/byte conversions
 
+This project references [purego](https://github.com/ebitengine/purego) for its no-cgo calling implementation and [rust2go](https://github.com/ihciah/rust2go) for FFI code generation design.
+
 ## Platform Support
 
 Currently supported:

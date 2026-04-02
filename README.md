@@ -2,7 +2,7 @@
 
 Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
 
-A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [rust2go](https://github.com/ihciah/rust2go).
+A lightweight, high-performance code generator for Go-to-Zig FFI, inspired by [purego](https://github.com/ebitengine/purego) and [rust2go](https://github.com/ihciah/rust2go).
 
 ## Key Features
 
