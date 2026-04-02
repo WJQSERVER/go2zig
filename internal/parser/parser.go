@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"regexp"
@@ -16,7 +17,7 @@ var (
 	slicePattern      = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{\s*ptr\s*:\s*\?\s*\[\*\]const\s+([^,]+),\s*len\s*:\s*usize\s*,?\s*\}\s*;`)
 	arrayAliasPattern = regexp.MustCompile(`(?m)^\s*pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\[[^;=]+)\s*;\s*$`)
 	funcPattern       = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?\?*(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
-	funcLinePattern   = regexp.MustCompile(`^(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\b`)
+	funcDeclPattern   = regexp.MustCompile(`^(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\b`)
 	arrayPattern      = regexp.MustCompile(`^\[(\d+)\](.+)$`)
 )
 
@@ -62,8 +63,15 @@ func Parse(content string) (*model.API, error) {
 func parseCodegenDirectives(content string) (map[string]model.FunctionCodegen, error) {
 	directives := map[string]model.FunctionCodegen{}
 	pending := []string{}
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
+	var decl strings.Builder
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	maxTokenSize := len(content)
+	if maxTokenSize < 64*1024 {
+		maxTokenSize = 64 * 1024
+	}
+	scanner.Buffer(make([]byte, 0, 64*1024), maxTokenSize)
+	for scanner.Scan() {
+		trimmed := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(trimmed, "///") || strings.HasPrefix(trimmed, "//!") {
 			continue
 		}
@@ -80,9 +88,13 @@ func parseCodegenDirectives(content string) (map[string]model.FunctionCodegen, e
 		if len(pending) == 0 {
 			continue
 		}
-		name, ok := parseFunctionNameFromLine(trimmed)
+		if decl.Len() > 0 {
+			decl.WriteByte(' ')
+		}
+		decl.WriteString(trimmed)
+		name, ok := parseFunctionNameFromDecl(decl.String())
 		if !ok {
-			return nil, fmt.Errorf("codegen directive must be attached to a function declaration")
+			continue
 		}
 		cfg := directives[name]
 		for _, raw := range pending {
@@ -92,6 +104,10 @@ func parseCodegenDirectives(content string) (map[string]model.FunctionCodegen, e
 		}
 		directives[name] = cfg
 		pending = nil
+		decl.Reset()
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan zig api directives: %w", err)
 	}
 	if len(pending) > 0 {
 		return nil, fmt.Errorf("codegen directive must be attached to a function declaration")
@@ -99,8 +115,8 @@ func parseCodegenDirectives(content string) (map[string]model.FunctionCodegen, e
 	return directives, nil
 }
 
-func parseFunctionNameFromLine(line string) (string, bool) {
-	match := funcLinePattern.FindStringSubmatch(line)
+func parseFunctionNameFromDecl(decl string) (string, bool) {
+	match := funcDeclPattern.FindStringSubmatch(decl)
 	if match == nil {
 		return "", false
 	}

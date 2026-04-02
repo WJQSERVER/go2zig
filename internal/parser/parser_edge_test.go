@@ -192,6 +192,26 @@ func TestParseCodegenDirectives(t *testing.T) {
 	}
 }
 
+func TestParseCodegenDirectivesAcrossMultilineFunctionDecl(t *testing.T) {
+	t.Parallel()
+
+	api, err := Parse(`
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        //go2zig:bridge-call noinline
+        pub extern fn
+        login(name: String) String;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := api.Funcs[0].Name; got != "login" {
+		t.Fatalf("function name = %q, want login", got)
+	}
+	if got := api.Funcs[0].Codegen.BridgeCall; got != model.CallHintNoInline {
+		t.Fatalf("login bridge call hint = %q, want noinline", got)
+	}
+}
+
 func TestParseRejectsUnknownCodegenDirective(t *testing.T) {
 	t.Parallel()
 
