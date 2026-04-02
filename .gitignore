@@ -1,0 +1,6 @@
+outrepo
+tmp_zig_test*
+examples/basic/*.a
+examples/basic/*.dll
+examples/basic/*.lib
+examples/basic/*.pdb
