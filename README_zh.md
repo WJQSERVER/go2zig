@@ -17,18 +17,18 @@
 `go2zig` 现在包含基于 `GoReader` 与 `GoWriter` 的实验性流桥接能力。
 
 - Go 侧辅助类型当前支持 `io.Reader`、`io.Writer`、`io.ReadCloser`、`io.WriteCloser` 以及 `io.Pipe`
+- Go 侧辅助类型也支持 `*os.File`
 - Zig 侧通过 `rt.streamRead(...)` 与 `rt.streamWrite(...)` 以同步分块方式消费流句柄
 - 当前实现是基于块的同步流桥接，还不是异步或全双工协议层
 - 流式能力必须显式开启：`WithStreamExperimental(true)` 或 `-stream-experimental`
 
 ## 平台分级
 
-参考 `purego` 的支持分级思路，`go2zig` 当前将平台支持划分为：
+参考 `purego` 的支持分级思路，当前主验证目标是：
 
-- **Tier 1** - CI 主验证目标：`windows/amd64`、`linux/amd64`
-- **Tier 2** - 已支持交叉构建或新接入的平台：`windows/arm64`、`linux/arm64`、`darwin/arm64`
+- **Tier 1** - `windows/amd64`、`windows/arm64`、`linux/amd64`、`linux/arm64`、`darwin/arm64`
 
-Tier 2 平台按 best-effort 方式支持，默认保证构建和生成包装可用；运行时边界行为仍可能需要额外的平台专项加固。
+这 5 个目标当前都会在主 CI 中跑测试、benchmark 与构建校验。
 
 ## 平台支持
 
@@ -61,7 +61,7 @@ Tier 2 平台按 best-effort 方式支持，默认保证构建和生成包装可
 - **结构体**：`extern struct` 支持嵌套字段
 - **枚举**：`enum(整数类型)` 支持显式值
 - **数组**：固定长度 `[N]Type` 和命名别名（如 `pub const Digest = [4]u8`）
-- **切片**：命名别名（如 `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`）
+- **切片**：命名别名（如 `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`），也包括元素为 struct 的切片别名
 - **可选类型**：`?POD`（如 `?u32`、`?UserKind`、`?Digest`）
 
 ### 特殊类型
@@ -69,7 +69,7 @@ Tier 2 平台按 best-effort 方式支持，默认保证构建和生成包装可
 - **Bytes**：映射到 Go `[]byte`（Zig 分配，Go 释放）
 
 ### 错误处理
-- **错误联合**：`error{...}!ReturnType` 映射到 Go `(T, error)` 或 `error`
+- **错误联合**：命名或内联 `error{...}!ReturnType` 映射到 Go `(T, error)` 或 `error`
 
 ## 不支持的类型
 
@@ -85,12 +85,11 @@ Tier 2 平台按 best-effort 方式支持，默认保证构建和生成包装可
 - `union`
 - `comptime`
 - `@import`
-- 复杂错误集
 
 ### 有限支持
-- 可选类型仅支持 POD（Plain Old Data）
+- 可选类型当前主要稳定覆盖 POD 风格形态
 - 切片元素不能是 `String` 或 `Bytes`
-- 嵌套可选（`??T`）不支持
+- 实验性流类型（`GoReader` / `GoWriter`）只能作为顶层函数参数出现
 
 ## 快速开始
 
@@ -197,7 +196,9 @@ func main() {
 - `gen.go` - Go 包装层，包含类型和函数
 - `go2zig_runtime.zig` - Zig 运行时辅助函数
 - `go2zig_exports.zig` - Zig 导出桥接函数
-- `mylib.dll` / `libmylib.so` - 动态库
+- `mylib.dll` / `libmylib.so` / `libmylib.dylib` - 动态库
+
+当 `Build()` 同时执行 Zig 编译时，还会额外写出 `go2zig_build_root.zig`，再调用 `zig build-lib`。
 
 ## Builder API
 
@@ -230,6 +231,8 @@ err := go2zig.NewBuilder().
 
 这样仍会保留 `Go2ZigClient` 方法，例如 `client.Login(...)`，但不会生成顶层转发函数，从而降低与手写包装层发生重名冲突的概率。
 
+当前 Builder API 还提供 `WithHeaderOutput`、`WithRuntimeZig`、`WithBridgeZig`、`WithDynamicBuild`、`WithStreamExperimental`、`WithAPIModuleName`、`WithImplModule` 等方法。
+
 ## 示例
 
 查看 `examples/basic/` 获取完整的工作示例，演示：
@@ -258,7 +261,7 @@ err := go2zig.NewBuilder().
 2. **类型**：不支持 Go 的 map、channel、interface
 3. **内存**：固定分配模式（Zig 分配，Go 释放）
 4. **性能**：每次调用需要数据复制
-5. **错误处理**：仅支持简单错误集
+5. **运行时加载**：如果跳过显式 `Load()` 且首次懒加载失败，当前生成调用路径会直接 panic
 
 ## 未来路线图
 

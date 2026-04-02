@@ -35,7 +35,7 @@ This layer does not directly participate in export implementation, but serves as
 - **Slices**: Named aliases (e.g., `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`)
 - **Optionals**: `?POD` (e.g., `?u32`, `?UserKind`)
 - **Error handling**: `error{...}!ReturnType`
-- **Special types**: `String`, `Bytes`
+- **Special types**: `String`, `Bytes`, and experimental `GoReader` / `GoWriter`
 
 ### Unsupported Syntax
 
@@ -60,7 +60,7 @@ Related locations:
 ### Type Model
 
 `internal/model/model.go` defines the type system:
-- `TypeKind` enum: `TypeVoid`, `TypePrimitive`, `TypeString`, `TypeBytes`, `TypeStruct`, `TypeEnum`, `TypeOptional`, `TypeSlice`, `TypeArray`
+- `TypeKind` enum: `TypeVoid`, `TypePrimitive`, `TypeString`, `TypeBytes`, `TypeGoReader`, `TypeGoWriter`, `TypeStruct`, `TypeEnum`, `TypeOptional`, `TypeSlice`, `TypeArray`
 - `PrimitiveInfo`: Maps Zig/Go/C types
 - `TypeRef`: Type reference, supports nesting and aliases
 
@@ -124,6 +124,12 @@ Related locations:
 - `WithPackageName(name)`: Set Go package name
 - `WithLibraryName(name)`: Set library name
 - `WithOptimize(mode)`: Set optimization level
+- `WithHeaderOutput(path)`: Emit a Zig header
+- `WithRuntimeZig(path)` / `WithBridgeZig(path)`: Customize generated file locations
+- `WithDynamicBuild(enabled)`: Switch between dynamic and static library builds
+- `WithTopLevelFunctions(enabled)`: Control top-level forwarding generation
+- `WithStreamExperimental(enabled)`: Enable the experimental stream bridge
+- `WithAPIModuleName(name)` / `WithImplModule(name)`: Override Zig `@import` module names
 - `Build()`: Execute generation and build
 
 ## 4. Runtime Call Layer
@@ -153,6 +159,7 @@ Design motivation:
 Uses different implementations on different platforms:
 - **Windows**: Based on system DLL loading interface (`syscall.LoadDLL`)
 - **Linux**: Based on `dlopen` / `dlsym` / `dlclose` (via assembly calls)
+- **Darwin**: Based on `dlopen` / `dlsym` / `dlclose`
 
 ### Error Protocol
 
@@ -197,8 +204,8 @@ Return value side uses:
 - `darwin/arm64`
 
 Where:
-- Windows path has entered main CI for live testing
-- Linux path is used in main CI for generation, compilation and integration verification; bottom-level runtime live testing is disabled by default, needs explicit enabling
+- All five currently supported targets run tests, benchmarks, and build checks in main CI
+- Linux jobs additionally enable bottom-level runtime execution tests through `GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1`
 
 ## Performance Characteristics
 

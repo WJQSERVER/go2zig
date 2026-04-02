@@ -11,9 +11,10 @@ Currently supported platforms:
 - **Windows/arm64** - Supported by the no-cgo asm runtime
 - **Linux/amd64** - Full support
 - **Linux/arm64** - Supported by the no-cgo asm runtime
+- **Darwin/arm64** - Dynamic loading and generated wrappers supported
 
 Unsupported platforms:
-- macOS
+- **Darwin/amd64** - Not currently supported
 - Other operating systems
 
 ### Software Requirements
@@ -69,7 +70,7 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 - **Structs**: `extern struct` with nested fields
 - **Enums**: `enum(integer_type)` with explicit values (e.g., `enum(u8)`, `enum(u16)`)
 - **Arrays**: Fixed-length `[N]Type` and named aliases (e.g., `pub const Digest = [4]u8`)
-- **Slices**: Named aliases (e.g., `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`)
+- **Slices**: Named aliases (e.g., `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }`), including aliases whose elements are structs
 - **Optionals**: `?POD` (e.g., `?u32`, `?UserKind`, `?Digest`)
 - **Error handling**: `error{...}!ReturnType`
 
@@ -80,7 +81,7 @@ pub extern fn login_checked(req: LoginRequest) LoginError!LoginResponse;
 #### Unsupported Types
 - Go-specific: `map`, `chan`, `interface{}`, function types, pointers
 - Zig-specific: `union`, `comptime`, `@import`
-- Limited support: Optional types only support POD, slice elements cannot be String/Bytes
+- Limited support: Optionals are currently centered on POD-style shapes, and slice elements cannot be String/Bytes
 
 ### Syntax Notes
 
@@ -137,7 +138,9 @@ By default, the following are produced:
 - `gen.go` - Go wrapper layer
 - `go2zig_runtime.zig` - Zig runtime helpers
 - `go2zig_exports.zig` - Zig export bridge
-- `basic.dll` or `libbasic.so` - Dynamic library
+- `basic.dll`, `libbasic.so`, or `libbasic.dylib` - Dynamic library
+
+If you disable dynamic builds programmatically through the Go Builder (`WithDynamicBuild(false)`), the output switches to a static library instead: `.lib` on Windows and `.a` elsewhere.
 
 ## 5. Call from Go
 
@@ -193,7 +196,7 @@ func main() {
 For supported types:
 - Zig `enum(u8)` generates Go named types and corresponding constants
 - Zig named array aliases generate Go named array types
-- POD slice aliases generate Go `[]T` named aliases, with automatic zero-copy input / copy output conversion
+- Named slice aliases generate Go `[]T` named aliases; current support includes not only POD slices but also slice aliases whose elements are structs
 - Zig `[N]T` generates Go `[N]T` arrays, with automatic ABI conversion
 - Zig `?T` currently generates `*T` on the Go side
 
@@ -207,6 +210,8 @@ if err := client.Load(); err != nil {
     panic(err)
 }
 ```
+
+It is still a good idea to call `Load()` explicitly before real calls. Generated methods also lazy-load internally, but if the first load fails, the current call path panics with that error.
 
 ## 7. How Error Returns Work
 
@@ -240,7 +245,18 @@ If you call the generator directly in Go code, the most commonly used are:
 - `WithPackageName(name)`
 - `WithLibraryName(name)`
 - `WithOptimize(mode)`
+- `WithTopLevelFunctions(enabled)`
 - `Build()`
+
+The current public API also includes:
+
+- `WithHeaderOutput(path)`
+- `WithRuntimeZig(path)`
+- `WithBridgeZig(path)`
+- `WithDynamicBuild(enabled)`
+- `WithStreamExperimental(enabled)`
+- `WithAPIModuleName(name)`
+- `WithImplModule(name)`
 
 Typical usage:
 
@@ -271,12 +287,15 @@ Current implementation characteristics:
 By default, it looks next to the generated `gen.go` file:
 - Windows: `basic.dll`
 - Linux: `libbasic.so`
+- Darwin: `libbasic.dylib`
 
 If the path is different, use `NewGo2ZigClient(customPath)`.
 
 ### Q2: Why doesn't Linux main CI run bottom-level runtime live tests?
 
-Because the no-`cgo` runtime on Linux is still being refined, current main CI focuses on stable generation, compilation and integration verification.
+It does now. The Linux CI jobs explicitly enable this path with `GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1`.
+
+The heading is kept for discoverability if you were looking for the old explanation.
 
 If you need to enable Linux runtime deep testing locally:
 
@@ -300,7 +319,7 @@ Recommended order:
 ### Q5: Why are some types not supported?
 
 Current design limitations:
-- **Platform limitation**: Only supports `amd64` and `arm64`
+- **Platform limitation**: Only supports Windows/Linux on `amd64` and `arm64`, plus Darwin on `arm64`
 - **Type limitation**: To maintain ABI stability and performance, dynamic types are not supported
 - **Memory management**: Fixed allocation pattern, cannot be customized
 

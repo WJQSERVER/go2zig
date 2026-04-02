@@ -16,19 +16,18 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 
 `go2zig` には、`GoReader` と `GoWriter` に基づく実験的なストリーム橋接が追加されています。
 
-- Go 側の補助型は現在 `io.Reader`、`io.Writer`、`io.ReadCloser`、`io.WriteCloser`、`io.Pipe` を扱えます
+- Go 側の補助型は現在 `io.Reader`、`io.Writer`、`io.ReadCloser`、`io.WriteCloser`、`io.Pipe`、`*os.File` を扱えます
 - Zig 側では `rt.streamRead(...)` と `rt.streamWrite(...)` を使って同期的な分割読み書きを行います
 - 現在の実装はブロック単位の同期ストリーム橋接であり、async や full-duplex のプロトコル層ではありません
 - ストリーム機能は `WithStreamExperimental(true)` または `-stream-experimental` で明示的に有効化する必要があります
 
 ## Platform Tiers
 
-`purego` のサポート階層の考え方を参考にして、`go2zig` では現在のプラットフォーム対応を次のように扱います。
+`purego` のサポート階層の考え方を参考にすると、現在の主な検証対象は次の 5 つです。
 
-- **Tier 1** - CI で主に検証している主要ターゲット: `windows/amd64`, `linux/amd64`
-- **Tier 2** - クロスビルド対応済み、または新たに有効化したターゲット: `windows/arm64`, `linux/arm64`, `darwin/arm64`
+- **Tier 1** - `windows/amd64`, `windows/arm64`, `linux/amd64`, `linux/arm64`, `darwin/arm64`
 
-Tier 2 は best-effort サポートです。ビルドと生成ラッパーの利用は前提としつつ、ランタイムの細かな挙動については追加のプラットフォーム固有対応が必要になる場合があります。
+これらのターゲットでは現在、メイン CI でテスト、ベンチマーク、ビルド確認を継続して実行しています。
 
 ## Platform Support
 
@@ -61,7 +60,7 @@ Tier 2 は best-effort サポートです。ビルドと生成ラッパーの利
 - **Structs**: ネストしたフィールドを含む `extern struct`
 - **Enums**: 明示的な値を持つ `enum(integer_type)`
 - **Arrays**: 固定長 `[N]Type` および `pub const Digest = [4]u8` のような名前付きエイリアス
-- **Slices**: `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }` のような名前付きエイリアス
+- **Slices**: `ScoreList = extern struct { ptr: ?[*]const u16, len: usize }` のような名前付きエイリアス。要素が struct の slice alias も含みます
 - **Optionals**: `?POD`（例: `?u32`, `?UserKind`, `?Digest`）
 
 ### Special Types
@@ -69,7 +68,7 @@ Tier 2 は best-effort サポートです。ビルドと生成ラッパーの利
 - **Bytes**: Go の `[]byte` にマッピングされます（Zig が確保し、Go が解放）
 
 ### Error Handling
-- **Error unions**: `error{...}!ReturnType` は Go の `(T, error)` または `error` にマッピングされます
+- **Error unions**: 名前付きまたはインラインの `error{...}!ReturnType` は Go の `(T, error)` または `error` にマッピングされます
 
 ## Unsupported Types
 
@@ -85,12 +84,11 @@ Tier 2 は best-effort サポートです。ビルドと生成ラッパーの利
 - `union`
 - `comptime`
 - `@import`
-- 複雑な error set
 
 ### Limited Support
-- Optional 型は POD（Plain Old Data）のみサポートされます
+- Optional 型は現在、主に POD 形状を安定サポートしています
 - Slice の要素に `String` または `Bytes` は使用できません
-- ネストした Optional（`??T`）はサポートされません
+- 実験的な `GoReader` / `GoWriter` はトップレベル関数の引数としてのみ利用できます
 
 ## Quick Start
 
@@ -197,7 +195,9 @@ Windows/amd64 でのベンチマーク結果に基づいています。
 - `gen.go` - 型と関数を含む Go ラッパー
 - `go2zig_runtime.zig` - Zig ランタイム補助コード
 - `go2zig_exports.zig` - Zig エクスポート用ブリッジ関数
-- `mylib.dll` / `libmylib.so` - 動的ライブラリ
+- `mylib.dll` / `libmylib.so` / `libmylib.dylib` - 動的ライブラリ
+
+`Build()` で Zig のコンパイルまで行う場合は、`zig build-lib` を呼ぶ前に `go2zig_build_root.zig` も追加で書き出されます。
 
 ## Builder API
 
@@ -230,6 +230,8 @@ err := go2zig.NewBuilder().
 
 この場合でも `Go2ZigClient` のメソッド、たとえば `client.Login(...)` は残りますが、トップレベルの転送関数は生成されません。手書きのラッパー層との名前衝突を避けたい場合に有効です。
 
+現在の Builder API には、`WithHeaderOutput`、`WithRuntimeZig`、`WithBridgeZig`、`WithDynamicBuild`、`WithStreamExperimental`、`WithAPIModuleName`、`WithImplModule` も含まれます。
+
 ## Examples
 
 完全な動作例については `examples/basic/` を参照してください。以下の内容を実演しています。
@@ -259,7 +261,7 @@ err := go2zig.NewBuilder().
 2. **Types**: Go の maps、channels、interfaces は未サポート
 3. **Memory**: 固定のメモリ管理方式（Zig が確保し、Go が解放）
 4. **Performance**: 各呼び出しでデータコピーが必要
-5. **Error handling**: 単純な error set のみ対応
+5. **Runtime loading**: 明示的に `Load()` せず、最初の遅延ロードに失敗した場合、現在の生成呼び出し経路は panic します
 
 ## Future Roadmap
 

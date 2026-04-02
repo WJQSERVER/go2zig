@@ -1,46 +1,50 @@
 # CI 説明
 
-現在の CI が主にカバーしているのは次の経路です。
+現在の CI は 5 ターゲットのマトリクスで動作しています。
 
-- Windows のメイン経路
-- Linux の生成 / コンパイル経路
+- `windows/amd64`
+- `windows/arm64`
+- `linux/amd64`
+- `linux/arm64`
+- `darwin/arm64`
 
-## CI が行うこと
+## 各 job が行うこと
 
-Windows job:
-- Go と Zig をインストールする
-- `examples/basic` を生成する
+各マトリクス項目では次を実行します。
+
+- `go.mod` で宣言された Go バージョンを導入する
+- Zig `0.15.2` を導入する
+- テスト前に `examples/basic` を再生成する
 - `go test ./...` を実行する
-- `go test -bench . ./asmcall` を実行する
-- PowerShell でクロスビルドを実行する: `$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./...`
+- `go test -run ^$ -bench . ./...` を実行する
+- 対応する `GOOS` / `GOARCH` で `go build ./...` を再確認する
 
-Linux job:
-- Go と Zig をインストールする
-- `examples/basic` を生成する
-- `go test ./...` を実行する
-- `go test -bench . ./asmcall` を実行する
-- `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...` を実行する
-- `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...` を実行する
+## Linux の追加検証
 
-Darwin job:
-- Go と Zig をインストールする
-- `examples/basic` を生成する
-- `go test ./...` を実行する
-- `GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./...` を実行する
+Linux の `amd64` / `arm64` job では `GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1` を明示的に設定しています。つまり現在のメイン CI ではすでに次も検証しています。
 
-## なぜ Linux runtime の実行テストはデフォルトで無効なのか
+- `asmcall` の Linux runtime 実行テスト
+- `dynlib` の Linux 動的ロード実行テスト
+- Linux runtime 経路を使うベンチマーク
 
-現在、Linux 上の no-`cgo` runtime は、性能を重視した低層実装の段階にあります。
+ローカルで同じ経路を再現するには次を使えます。
 
-メイン CI をより安定させるため、現在のデフォルト方針は次のとおりです。
+```bash
+GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./...
+GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./...
+```
 
-- メイン CI では Linux 経路が生成、コンパイル、統合ビルドできることを検証する
-- 低層 runtime の実行テストは環境変数で手動有効化する
+## CI が主に確認していること
 
-これにより、まだ磨き込み中のアセンブリ呼び出し詳細に、すべての CI 結果が依存してしまうのを避けられます。
+このマトリクスは主に次を確認しています。
 
-## 今後さらに実施できること
+- `gen.go`、`go2zig_runtime.zig`、`go2zig_exports.zig` が安定して生成できるか
+- build tag、動的ライブラリ名、ランタイムロード経路が全サポートターゲットで整合しているか
+- basic / stream / integration / benchmark が端から端まで壊れていないか
+- no-`cgo` 呼び出し経路を変更が壊していないか
 
-- 手動トリガー式の Linux runtime 詳細検証 workflow を追加する
-- benchmark 結果のアーカイブを追加する
-- action エコシステムが安定したら、Node 24 対応版へ統一移行する
+## 今後さらに改善したい点
+
+- benchmark 結果を保存して回帰を見つけやすくする
+- CI 時間が増えたら smoke test と full benchmark を分離する
+- リリース前確認用にドキュメントや example 生成物を artifact 化する

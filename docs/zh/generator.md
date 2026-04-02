@@ -15,7 +15,12 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 - `gen.go`
 - `go2zig_runtime.zig`
 - `go2zig_exports.zig`
-- `basic.dll` 或 `libbasic.so`
+- `basic.dll`、`libbasic.so` 或 `libbasic.dylib`
+
+如果通过 Go Builder 以编程方式调用 `WithDynamicBuild(false)`，则构建产物会改为静态库：
+
+- Windows: `basic.lib`
+- 非 Windows: `libbasic.a`
 
 ## `gen.go` 的职责
 
@@ -56,6 +61,51 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 - `[]struct`
 - `optional POD`
 - `error union`
+
+这里的 `slice alias` 实际能力比最早文档里的“POD 切片”更宽：
+
+- 支持 primitive / enum / array / array alias
+- 支持元素为 struct 的命名切片别名
+- 支持 struct 字段中继续包含 POD slice 字段
+
+当前仍然不支持把 `String` 或 `Bytes` 作为切片元素。
+
+## Builder / Generate 真实产物行为
+
+`Generate(...)` 只会：
+
+- 必定写出 Go 文件
+- 在 `RuntimeZig` 非空时写出 `go2zig_runtime.zig`
+- 在 `BridgeZig` 非空时写出 `go2zig_exports.zig`
+
+`Builder.Build()` 则会默认补齐 runtime/bridge 路径，因此通常会生成这三个文件；如果同时提供 `WithZigSource(...)`，还会额外：
+
+- 写出 `go2zig_build_root.zig`
+- 调用 `zig build-lib`
+
+## 当前 Builder 常用方法
+
+除了文档里常见的几项，当前公开 Builder 还包括：
+
+- `WithHeaderOutput(path)`
+- `WithRuntimeZig(path)`
+- `WithBridgeZig(path)`
+- `WithDynamicBuild(enabled)`
+- `WithStreamExperimental(enabled)`
+- `WithAPIModuleName(name)`
+- `WithImplModule(name)`
+
+其中 CLI 目前只暴露了 `-header`、`-runtime-zig`、`-bridge-zig`、`-stream-experimental`；静态库构建和自定义模块名仍主要走 Go Builder API。
+
+## 一个当前实现限制
+
+虽然 Builder 和 `GenerateConfig` 都允许自定义 `RuntimeZig` 输出路径，但 `go2zig_exports.zig` 内部当前仍固定使用：
+
+```zig
+const rt = @import("go2zig_runtime.zig");
+```
+
+因此最稳妥的用法仍然是让 runtime 文件与 bridge 文件保持默认相对位置和默认文件名。
 
 ## 为什么要用 frame
 

@@ -40,11 +40,14 @@ go test ./internal/generator
 関連ファイル:
 - `go2zig_test.go`
 - `examples/basic/example_test.go`
+- `examples/basic/edge_test.go`
+- `examples/stream/stream_test.go`
 
 主な検証内容:
 - 実際の生成フローが最後まで動作するか
 - Zig の動的ライブラリを正しくビルドできるか
 - Go 側からさまざまな複雑な型を呼び出して正しい結果を得られるか
+- 実験的ストリーム橋接が `io.Reader` / `io.Writer` / `io.Pipe` / `*os.File` を正しく扱えるか
 
 実行方法:
 
@@ -85,7 +88,7 @@ go test -run X -bench 'Benchmark(CgoAddU64|AsmCallCAddU64)$' ./benchcmp
 
 ## Linux runtime の詳細テスト
 
-Linux の低層 runtime 実行テストは、メイン CI ではデフォルトで有効化されていません。
+Linux の低層 runtime 実行テストは、現在は Linux CI job で有効化されています。
 
 ローカルで手動有効化する場合:
 
@@ -105,6 +108,12 @@ generator / runtime を変更した場合:
 
 ```bash
 go test ./internal/generator ./...
+```
+
+Linux の低層 runtime 経路に触れる変更なら、さらに次も推奨です。
+
+```bash
+GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 ```
 
 性能関連を変更した場合:

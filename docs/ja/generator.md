@@ -14,7 +14,12 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 - `gen.go`
 - `go2zig_runtime.zig`
 - `go2zig_exports.zig`
-- `basic.dll` または `libbasic.so`
+- `basic.dll`、`libbasic.so`、または `libbasic.dylib`
+
+Go Builder から `WithDynamicBuild(false)` を使うと、ビルド成果物は静的ライブラリに切り替わります。
+
+- Windows: `basic.lib`
+- Windows 以外: `libbasic.a`
 
 ## `gen.go` の役割
 
@@ -55,6 +60,51 @@ go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig 
 - `[]struct`
 - `optional POD`
 - `error union`
+
+ここでいう `slice alias` は、初期ドキュメントの「POD slice」よりも広い範囲を指します。
+
+- primitive / enum / array / array alias 要素
+- 要素が struct の名前付き slice alias
+- struct 内に POD slice フィールドを含むケース
+
+ただし、`String` と `Bytes` を slice 要素にすることは引き続き未対応です。
+
+## Builder / Generate の実際の出力挙動
+
+`Generate(...)` が行うのは次です。
+
+- Go ファイルは常に出力する
+- `RuntimeZig` が非空なら `go2zig_runtime.zig` を出力する
+- `BridgeZig` が非空なら `go2zig_exports.zig` を出力する
+
+`Builder.Build()` は runtime / bridge のパスをデフォルトで補完するため、通常はこの 3 ファイルを生成します。さらに `WithZigSource(...)` を指定した場合は次も行います。
+
+- `go2zig_build_root.zig` を出力する
+- `zig build-lib` を実行する
+
+## 現在の Builder メソッド
+
+一般によく紹介されるメソッドに加えて、現在の公開 Builder には次もあります。
+
+- `WithHeaderOutput(path)`
+- `WithRuntimeZig(path)`
+- `WithBridgeZig(path)`
+- `WithDynamicBuild(enabled)`
+- `WithStreamExperimental(enabled)`
+- `WithAPIModuleName(name)`
+- `WithImplModule(name)`
+
+CLI が現在直接公開しているのは `-header`、`-runtime-zig`、`-bridge-zig`、`-stream-experimental` です。静的ライブラリ生成やモジュール名の上書きは主に Go Builder API を使います。
+
+## 現在の実装上の制限
+
+Builder と `GenerateConfig` は `RuntimeZig` の出力先を変更できますが、`go2zig_exports.zig` 側では現在も次を固定で使っています。
+
+```zig
+const rt = @import("go2zig_runtime.zig");
+```
+
+そのため、現時点で最も安全なのは runtime ファイルを bridge ファイルの近くにデフォルト名で置く構成です。
 
 ## なぜ frame を使うのか
 

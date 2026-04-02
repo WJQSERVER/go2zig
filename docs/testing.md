@@ -45,12 +45,15 @@ go test ./internal/generator
 
 - `go2zig_test.go`
 - `examples/basic/example_test.go`
+- `examples/basic/edge_test.go`
+- `examples/stream/stream_test.go`
 
 重点验证：
 
 - 真实生成流程是否能跑通
 - Zig 动态库是否能正确构建
 - Go 侧调用各种复杂类型是否能得到正确结果
+- 实验性流桥接是否能处理 `io.Reader` / `io.Writer` / `io.Pipe` / `*os.File`
 
 运行：
 
@@ -93,7 +96,7 @@ go test -run X -bench 'Benchmark(CgoAddU64|AsmCallCAddU64)$' ./benchcmp
 
 ## Linux runtime 深测
 
-Linux 底层 runtime 实跑测试默认不在主 CI 中开启。
+Linux 底层 runtime 实跑测试当前已经在 CI 的 Linux job 中开启。
 
 本地手动开启：
 
@@ -113,6 +116,12 @@ go test ./internal/parser ./internal/model
 
 ```bash
 go test ./internal/generator ./...
+```
+
+如果改动涉及 Linux runtime 低层路径，建议额外跑：
+
+```bash
+GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./asmcall ./dynlib
 ```
 
 改性能相关：

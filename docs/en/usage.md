@@ -154,7 +154,9 @@ By default, the following are produced:
 - `gen.go` - Go wrapper layer
 - `go2zig_runtime.zig` - Zig runtime helpers
 - `go2zig_exports.zig` - Zig export bridge
-- `basic.dll` or `libbasic.so` - Dynamic library
+- `basic.dll`, `libbasic.so`, or `libbasic.dylib` - Dynamic library
+
+If you disable dynamic builds programmatically through the Go Builder (`WithDynamicBuild(false)`), the output switches to a static library instead: `.lib` on Windows and `.a` elsewhere.
 
 ## 5. Call from Go
 
@@ -212,7 +214,7 @@ If `-no-top-level` is enabled, only client methods are generated.
 For supported types:
 - Zig `enum(u8)` generates Go named types and corresponding constants
 - Zig named array aliases generate Go named array types
-- POD slice aliases generate Go `[]T` named aliases, with automatic zero-copy input / copy output conversion
+- Named slice aliases generate Go `[]T` named aliases; current support includes not only POD slices but also slice aliases whose elements are structs
 - Zig `[N]T` generates Go `[N]T` arrays, with automatic ABI conversion
 - Zig `?T` currently generates `*T` on the Go side
 
@@ -304,6 +306,8 @@ if err := client.Load(); err != nil {
 }
 ```
 
+It is still a good idea to call `Load()` explicitly before real calls. Generated methods also lazy-load internally, but if the first load fails, the current call path panics with that error.
+
 ## 7. How Error Returns Work
 
 For Zig `error union`, Go side automatically generates:
@@ -338,6 +342,16 @@ If you call the generator directly in Go code, the most commonly used are:
 - `WithOptimize(mode)`
 - `WithTopLevelFunctions(enabled)`
 - `Build()`
+
+The current public API also includes:
+
+- `WithHeaderOutput(path)`
+- `WithRuntimeZig(path)`
+- `WithBridgeZig(path)`
+- `WithDynamicBuild(enabled)`
+- `WithStreamExperimental(enabled)`
+- `WithAPIModuleName(name)`
+- `WithImplModule(name)`
 
 Typical usage:
 
@@ -383,12 +397,15 @@ Current implementation characteristics:
 By default, it looks next to the generated `gen.go` file:
 - Windows: `basic.dll`
 - Linux: `libbasic.so`
+- Darwin: `libbasic.dylib`
 
 If the path is different, use `NewGo2ZigClient(customPath)`.
 
 ### Q2: Why doesn't Linux main CI run bottom-level runtime live tests?
 
-Because the no-`cgo` runtime on Linux is still being refined, current main CI focuses on stable generation, compilation and integration verification.
+It does now. The Linux CI jobs explicitly enable this path with `GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1`.
+
+The heading is kept for discoverability if you were looking for the old explanation.
 
 If you need to enable Linux runtime deep testing locally:
 
