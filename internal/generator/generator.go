@@ -13,16 +13,20 @@ import (
 )
 
 type Config struct {
-	PackageName        string
-	LibraryName        string
-	APIModule          string
-	ImplModule         string
-	DisableTopLevel    bool
-	StreamExperimental bool
+	PackageName              string
+	LibraryName              string
+	APIModule                string
+	ImplModule               string
+	DisableTopLevel          bool
+	StreamExperimental       bool
+	CodegenHintsExperimental bool
 }
 
 func Render(api *model.API, cfg Config) ([]byte, error) {
 	if err := validateStreams(api, cfg); err != nil {
+		return nil, err
+	}
+	if err := validateCodegenHints(api, cfg); err != nil {
 		return nil, err
 	}
 	if cfg.PackageName == "" {
@@ -407,16 +411,9 @@ func RenderZigBridge(api *model.API, cfg Config) []byte {
 		body.WriteString(") void {\n")
 		if fn.CanErr {
 			body.WriteString("    frame.err = rt.okError();\n")
-			body.WriteString("    const result = impl.")
-			body.WriteString(fn.Name)
-			body.WriteString("(")
-			for i, param := range fn.Params {
-				if i > 0 {
-					body.WriteString(", ")
-				}
-				body.WriteString(zigBridgeArgExpr(param.Type, "frame."+param.Name))
-			}
-			body.WriteString(") catch |err| {\n")
+			body.WriteString("    const result = ")
+			body.WriteString(zigBridgeCallExpr(fn))
+			body.WriteString(" catch |err| {\n")
 			body.WriteString("        frame.err = rt.makeError(err);\n")
 			body.WriteString("        return;\n")
 			body.WriteString("    };\n")
@@ -427,21 +424,14 @@ func RenderZigBridge(api *model.API, cfg Config) []byte {
 			}
 		} else {
 			if fn.Return.Kind != model.TypeVoid {
-				body.WriteString("    const result = impl.")
-				body.WriteString(fn.Name)
-				body.WriteString("(")
+				body.WriteString("    const result = ")
+				body.WriteString(zigBridgeCallExpr(fn))
+				body.WriteString(";\n")
 			} else {
-				body.WriteString("    impl.")
-				body.WriteString(fn.Name)
-				body.WriteString("(")
+				body.WriteString("    ")
+				body.WriteString(zigBridgeCallExpr(fn))
+				body.WriteString(";\n")
 			}
-			for i, param := range fn.Params {
-				if i > 0 {
-					body.WriteString(", ")
-				}
-				body.WriteString(zigBridgeArgExpr(param.Type, "frame."+param.Name))
-			}
-			body.WriteString(");\n")
 			if fn.Return.Kind != model.TypeVoid {
 				body.WriteString("    ")
 				body.WriteString(zigBridgeStoreExpr(fn.Return, "frame.out", "result"))
@@ -483,6 +473,16 @@ func validateStreams(api *model.API, cfg Config) error {
 	}
 	if !cfg.StreamExperimental {
 		return fmt.Errorf("go2zig: GoReader/GoWriter support is experimental; enable it explicitly with WithStreamExperimental(true) or -stream-experimental")
+	}
+	return nil
+}
+
+func validateCodegenHints(api *model.API, cfg Config) error {
+	if !api.UsesCodegenHints() {
+		return nil
+	}
+	if !cfg.CodegenHintsExperimental {
+		return fmt.Errorf("go2zig: declaration-driven codegen hints are experimental; enable them explicitly with WithCodegenHintsExperimental(true) or -codegen-hints-experimental")
 	}
 	return nil
 }
@@ -874,6 +874,9 @@ func renderMethod(api *model.API, fn *model.Function) string {
 	goName := names.Exported(fn.Name)
 	var b strings.Builder
 	keepVars := make([]string, 0)
+	if fn.Codegen.GoNoInline {
+		b.WriteString("//go:noinline\n")
+	}
 	b.WriteString("func (c *Go2ZigClient) ")
 	b.WriteString(goName)
 	b.WriteString("(")
@@ -998,6 +1001,9 @@ func renderMethod(api *model.API, fn *model.Function) string {
 func renderTopLevel(fn *model.Function) string {
 	goName := names.Exported(fn.Name)
 	var b strings.Builder
+	if fn.Codegen.GoNoInline {
+		b.WriteString("//go:noinline\n")
+	}
 	b.WriteString("func ")
 	b.WriteString(goName)
 	b.WriteString("(")
@@ -1207,6 +1213,21 @@ func zigFrameName(fn *model.Function) string {
 }
 func procFieldName(fn *model.Function) string  { return "proc" + names.Exported(fn.Name) }
 func procSymbolName(fn *model.Function) string { return "go2zig_call_" + fn.Name }
+
+func zigBridgeCallExpr(fn *model.Function) string {
+	args := make([]string, 0, len(fn.Params))
+	for _, param := range fn.Params {
+		args = append(args, zigBridgeArgExpr(param.Type, "frame."+param.Name))
+	}
+	switch fn.Codegen.BridgeCall {
+	case model.CallHintInline:
+		return "@call(.always_inline, impl." + fn.Name + ", .{" + strings.Join(args, ", ") + "})"
+	case model.CallHintNoInline:
+		return "@call(.never_inline, impl." + fn.Name + ", .{" + strings.Join(args, ", ") + "})"
+	default:
+		return "impl." + fn.Name + "(" + strings.Join(args, ", ") + ")"
+	}
+}
 
 func goFrameType(t model.TypeRef) string {
 	switch t.Kind {

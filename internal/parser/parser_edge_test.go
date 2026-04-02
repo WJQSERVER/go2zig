@@ -171,3 +171,53 @@ func TestParseRejectsNestedStreamTypes(t *testing.T) {
 		t.Fatalf("Parse() error = %q, want unsupported stream type message", err)
 	}
 }
+
+func TestParseCodegenDirectives(t *testing.T) {
+	t.Parallel()
+
+	api, err := Parse(`
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        //go2zig:bridge-call inline
+        //go2zig:go-noinline
+        pub extern fn login(name: String) String;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := api.Funcs[0].Codegen.BridgeCall; got != model.CallHintInline {
+		t.Fatalf("login bridge call hint = %q, want inline", got)
+	}
+	if !api.Funcs[0].Codegen.GoNoInline {
+		t.Fatal("login should enable go noinline hint")
+	}
+}
+
+func TestParseRejectsUnknownCodegenDirective(t *testing.T) {
+	t.Parallel()
+
+	_, err := Parse(`
+        //go2zig:unknown value
+        pub extern fn login() void;
+    `)
+	if err == nil {
+		t.Fatal("Parse() error = nil, want codegen directive error")
+	}
+	if !strings.Contains(err.Error(), "unsupported codegen directive") {
+		t.Fatalf("Parse() error = %q, want unsupported codegen directive message", err)
+	}
+}
+
+func TestParseRejectsDetachedCodegenDirective(t *testing.T) {
+	t.Parallel()
+
+	_, err := Parse(`
+        //go2zig:bridge-call inline
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+    `)
+	if err == nil {
+		t.Fatal("Parse() error = nil, want detached codegen directive error")
+	}
+	if !strings.Contains(err.Error(), "must be attached to a function declaration") {
+		t.Fatalf("Parse() error = %q, want detached directive message", err)
+	}
+}

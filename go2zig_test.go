@@ -511,6 +511,109 @@ func TestBuilderEnablesStreamsWithExperimentalFlag(t *testing.T) {
 	}
 }
 
+func TestBuilderRejectsCodegenHintsWithoutExperimentalFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, `
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        //go2zig:bridge-call inline
+        pub extern fn login(name: String) String;
+    `)
+
+	err := NewBuilder().
+		WithAPI(apiPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		Build()
+	if err == nil {
+		t.Fatal("Builder.Build() error = nil, want codegen hint experimental error")
+	}
+	if !strings.Contains(err.Error(), "experimental") {
+		t.Fatalf("Builder.Build() error = %q, want experimental message", err)
+	}
+}
+
+func TestBuilderEnablesCodegenHintsWithExperimentalFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, `
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        //go2zig:bridge-call inline
+        //go2zig:go-noinline
+        pub extern fn login(name: String) String;
+    `)
+
+	err := NewBuilder().
+		WithAPI(apiPath).
+		WithOutput(outPath).
+		WithPackageName("sample").
+		WithLibraryName("sample").
+		WithCodegenHintsExperimental(true).
+		Build()
+	if err != nil {
+		t.Fatalf("Builder.Build() error = %v", err)
+	}
+
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile(gen.go) error = %v", err)
+	}
+	text := string(content)
+	if !strings.Contains(text, "//go:noinline\nfunc (c *Go2ZigClient) Login(name string) string") {
+		t.Fatalf("generated file missing Go noinline wrapper\n%s", text)
+	}
+
+	bridgeText, err := os.ReadFile(filepath.Join(dir, "go2zig_exports.zig"))
+	if err != nil {
+		t.Fatalf("ReadFile(bridge) error = %v", err)
+	}
+	if !strings.Contains(string(bridgeText), "@call(.always_inline, impl.login, .{frame.name})") {
+		t.Fatalf("bridge zig missing always_inline bridge call\n%s", bridgeText)
+	}
+}
+
+func TestGenerateCodegenHintsWithExperimentalFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.zig")
+	outPath := filepath.Join(dir, "gen.go")
+	writeFile(t, apiPath, `
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        //go2zig:bridge-call noinline
+        pub extern fn login(name: String) String;
+    `)
+
+	if err := Generate(GenerateConfig{
+		API:                      apiPath,
+		Output:                   outPath,
+		PackageName:              "sample",
+		LibraryName:              "sample",
+		RuntimeZig:               filepath.Join(dir, "go2zig_runtime.zig"),
+		BridgeZig:                filepath.Join(dir, "go2zig_exports.zig"),
+		APIModule:                "api.zig",
+		ImplModule:               "lib.zig",
+		CodegenHintsExperimental: true,
+	}); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	bridgeText, err := os.ReadFile(filepath.Join(dir, "go2zig_exports.zig"))
+	if err != nil {
+		t.Fatalf("ReadFile(bridge) error = %v", err)
+	}
+	if !strings.Contains(string(bridgeText), "@call(.never_inline, impl.login, .{frame.name})") {
+		t.Fatalf("bridge zig missing never_inline bridge call\n%s", bridgeText)
+	}
+}
+
 func TestBuilderBuildsExperimentalStreamsAcrossDirectories(t *testing.T) {
 	t.Parallel()
 

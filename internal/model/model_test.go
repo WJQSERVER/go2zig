@@ -298,3 +298,38 @@ func TestStreamParamsAllowedOnlyAtTopLevel(t *testing.T) {
 		t.Fatal("New() error = nil, want stream return rejection")
 	}
 }
+
+func TestFunctionCodegenValidate(t *testing.T) {
+	t.Parallel()
+
+	if err := (FunctionCodegen{BridgeCall: CallHintInline}).Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+	if err := (FunctionCodegen{BridgeCall: CallHint("bad")}).Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want unsupported bridge call hint")
+	}
+
+	var cfg FunctionCodegen
+	if err := cfg.SetBridgeCallHint(CallHintInline); err != nil {
+		t.Fatalf("SetBridgeCallHint(inline) error = %v", err)
+	}
+	if err := cfg.SetBridgeCallHint(CallHintNoInline); err == nil {
+		t.Fatal("SetBridgeCallHint(noinline) error = nil, want conflict")
+	}
+}
+
+func TestAPIUsesCodegenHints(t *testing.T) {
+	t.Parallel()
+
+	api, err := New(nil, nil, nil, nil, []*Function{{
+		Name:    "login",
+		Return:  TypeRef{Kind: TypeVoid, Raw: "void"},
+		Codegen: FunctionCodegen{GoNoInline: true},
+	}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if !api.UsesCodegenHints() {
+		t.Fatal("UsesCodegenHints() = false, want true")
+	}
+}

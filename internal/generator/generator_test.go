@@ -211,6 +211,61 @@ func TestRenderRejectsStreamsWithoutExperimentalFlag(t *testing.T) {
 	}
 }
 
+func TestRenderRejectsCodegenHintsWithoutExperimentalFlag(t *testing.T) {
+	t.Parallel()
+
+	api, err := parser.Parse(`
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        //go2zig:bridge-call inline
+        pub extern fn login(name: String) String;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	_, err = Render(api, Config{PackageName: "basic", LibraryName: "basic", APIModule: "api.zig", ImplModule: "lib.zig"})
+	if err == nil {
+		t.Fatal("Render() error = nil, want codegen hint experimental gating")
+	}
+	if !strings.Contains(err.Error(), "experimental") {
+		t.Fatalf("Render() error = %q, want experimental message", err)
+	}
+}
+
+func TestRenderCodegenHintsWithExperimentalFlag(t *testing.T) {
+	t.Parallel()
+
+	api, err := parser.Parse(`
+        pub const String = extern struct { ptr: [*]const u8, len: usize, };
+        //go2zig:bridge-call inline
+        //go2zig:go-noinline
+        pub extern fn login(name: String) String;
+        //go2zig:bridge-call noinline
+        pub extern fn health() bool;
+    `)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	out, err := Render(api, Config{PackageName: "basic", LibraryName: "basic", APIModule: "api.zig", ImplModule: "lib.zig", CodegenHintsExperimental: true})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	content := string(out)
+	for _, check := range []string{"//go:noinline\nfunc (c *Go2ZigClient) Login(name string) string", "//go:noinline\nfunc Login(name string) string"} {
+		if !strings.Contains(content, check) {
+			t.Fatalf("Render() output missing %q\n%s", check, content)
+		}
+	}
+
+	bridgeText := string(RenderZigBridge(api, Config{APIModule: "api.zig", ImplModule: "lib.zig", CodegenHintsExperimental: true}))
+	for _, check := range []string{"const result = @call(.always_inline, impl.login, .{frame.name})", "@call(.never_inline, impl.health, .{})"} {
+		if !strings.Contains(bridgeText, check) {
+			t.Fatalf("RenderZigBridge() missing %q\n%s", check, bridgeText)
+		}
+	}
+}
+
 func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 	t.Parallel()
 

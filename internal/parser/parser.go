@@ -16,8 +16,11 @@ var (
 	slicePattern      = regexp.MustCompile(`(?s)pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*extern\s+struct\s*\{\s*ptr\s*:\s*\?\s*\[\*\]const\s+([^,]+),\s*len\s*:\s*usize\s*,?\s*\}\s*;`)
 	arrayAliasPattern = regexp.MustCompile(`(?m)^\s*pub\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\[[^;=]+)\s*;\s*$`)
 	funcPattern       = regexp.MustCompile(`(?s)(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)\s*((?:error\s*\{[^}]*\}\s*!|[A-Za-z_][A-Za-z0-9_\.]*(?:\s*!\s*))?\?*(?:\[\d+\])*[A-Za-z_][A-Za-z0-9_\.]*)\s*(?:;|\{)`)
+	funcLinePattern   = regexp.MustCompile(`^(?:pub\s+)?(?:extern|export)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\b`)
 	arrayPattern      = regexp.MustCompile(`^\[(\d+)\](.+)$`)
 )
+
+const codegenDirectivePrefix = "//go2zig:"
 
 func ParseFile(path string) (*model.API, error) {
 	content, err := os.ReadFile(path)
@@ -28,6 +31,10 @@ func ParseFile(path string) (*model.API, error) {
 }
 
 func Parse(content string) (*model.API, error) {
+	directives, err := parseCodegenDirectives(content)
+	if err != nil {
+		return nil, err
+	}
 	clean := stripComments(content)
 	structs, err := parseStructs(clean)
 	if err != nil {
@@ -45,11 +52,88 @@ func Parse(content string) (*model.API, error) {
 	if err != nil {
 		return nil, err
 	}
-	funcs, err := parseFunctions(clean)
+	funcs, err := parseFunctions(clean, directives)
 	if err != nil {
 		return nil, err
 	}
 	return model.New(structs, enums, slices, arrays, funcs)
+}
+
+func parseCodegenDirectives(content string) (map[string]model.FunctionCodegen, error) {
+	directives := map[string]model.FunctionCodegen{}
+	pending := []string{}
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "///") || strings.HasPrefix(trimmed, "//!") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, codegenDirectivePrefix) {
+			pending = append(pending, strings.TrimSpace(strings.TrimPrefix(trimmed, codegenDirectivePrefix)))
+			continue
+		}
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		if len(pending) == 0 {
+			continue
+		}
+		name, ok := parseFunctionNameFromLine(trimmed)
+		if !ok {
+			return nil, fmt.Errorf("codegen directive must be attached to a function declaration")
+		}
+		cfg := directives[name]
+		for _, raw := range pending {
+			if err := applyCodegenDirective(&cfg, raw); err != nil {
+				return nil, fmt.Errorf("function %q: %w", name, err)
+			}
+		}
+		directives[name] = cfg
+		pending = nil
+	}
+	if len(pending) > 0 {
+		return nil, fmt.Errorf("codegen directive must be attached to a function declaration")
+	}
+	return directives, nil
+}
+
+func parseFunctionNameFromLine(line string) (string, bool) {
+	match := funcLinePattern.FindStringSubmatch(line)
+	if match == nil {
+		return "", false
+	}
+	return match[1], true
+}
+
+func applyCodegenDirective(cfg *model.FunctionCodegen, raw string) error {
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return fmt.Errorf("empty codegen directive")
+	}
+	switch fields[0] {
+	case "bridge-call":
+		if len(fields) != 2 {
+			return fmt.Errorf("bridge-call directive expects exactly one value")
+		}
+		switch fields[1] {
+		case "inline":
+			return cfg.SetBridgeCallHint(model.CallHintInline)
+		case "noinline":
+			return cfg.SetBridgeCallHint(model.CallHintNoInline)
+		default:
+			return fmt.Errorf("unsupported bridge-call value %q", fields[1])
+		}
+	case "go-noinline":
+		if len(fields) != 1 {
+			return fmt.Errorf("go-noinline directive does not take values")
+		}
+		cfg.GoNoInline = true
+	default:
+		return fmt.Errorf("unsupported codegen directive %q", fields[0])
+	}
+	return nil
 }
 
 func parseStructs(content string) ([]*model.Struct, error) {
@@ -151,7 +235,7 @@ func parseEnumValues(body string) ([]model.EnumValue, error) {
 	return values, nil
 }
 
-func parseFunctions(content string) ([]*model.Function, error) {
+func parseFunctions(content string, directives map[string]model.FunctionCodegen) ([]*model.Function, error) {
 	matches := funcPattern.FindAllStringSubmatch(content, -1)
 	funcs := make([]*model.Function, 0, len(matches))
 	for _, match := range matches {
@@ -163,7 +247,7 @@ func parseFunctions(content string) ([]*model.Function, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse function %q return: %w", match[1], err)
 		}
-		funcs = append(funcs, &model.Function{Name: match[1], Params: params, Return: ret, CanErr: canErr})
+		funcs = append(funcs, &model.Function{Name: match[1], Params: params, Return: ret, CanErr: canErr, Codegen: directives[match[1]]})
 	}
 	return funcs, nil
 }

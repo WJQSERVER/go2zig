@@ -89,10 +89,45 @@ type ArrayAlias struct {
 }
 
 type Function struct {
-	Name   string
-	Params []Field
-	Return TypeRef
-	CanErr bool
+	Name    string
+	Params  []Field
+	Return  TypeRef
+	CanErr  bool
+	Codegen FunctionCodegen
+}
+
+type CallHint string
+
+const (
+	CallHintAuto     CallHint = ""
+	CallHintInline   CallHint = "inline"
+	CallHintNoInline CallHint = "noinline"
+)
+
+type FunctionCodegen struct {
+	BridgeCall CallHint
+	GoNoInline bool
+}
+
+func (c *FunctionCodegen) SetBridgeCallHint(value CallHint) error {
+	if c.BridgeCall == CallHintAuto || c.BridgeCall == value {
+		c.BridgeCall = value
+		return nil
+	}
+	return fmt.Errorf("conflicting bridge-call directives")
+}
+
+func (c FunctionCodegen) Validate() error {
+	switch c.BridgeCall {
+	case CallHintAuto, CallHintInline, CallHintNoInline:
+		return nil
+	default:
+		return fmt.Errorf("unsupported bridge call hint %q", c.BridgeCall)
+	}
+}
+
+func (c FunctionCodegen) UsesExperimental() bool {
+	return c.BridgeCall != CallHintAuto || c.GoNoInline
 }
 
 type API struct {
@@ -227,6 +262,9 @@ func New(structs []*Struct, enums []*Enum, slices []*Slice, arrays []*ArrayAlias
 	}
 
 	for _, item := range funcs {
+		if err := item.Codegen.Validate(); err != nil {
+			return nil, fmt.Errorf("function %q: %w", item.Name, err)
+		}
 		for i := range item.Params {
 			if err := api.resolveType(&item.Params[i].Type, "function "+item.Name); err != nil {
 				return nil, err
@@ -447,6 +485,15 @@ func (a *API) typeNeedsAllocation(t TypeRef, seen map[string]bool) bool {
 			if a.typeNeedsAllocation(field.Type, seen) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func (a *API) UsesCodegenHints() bool {
+	for _, fn := range a.Funcs {
+		if fn.Codegen.UsesExperimental() {
+			return true
 		}
 	}
 	return false

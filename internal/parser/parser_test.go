@@ -98,6 +98,8 @@ pub const LoginError = error{
 };
 
 pub extern fn health() bool;
+//go2zig:bridge-call noinline
+//go2zig:go-noinline
 pub export fn login(req: LoginRequest) LoginResponse {
     unreachable;
 }
@@ -167,6 +169,12 @@ func TestParse(t *testing.T) {
 	}
 	if got := api.Funcs[1].Return.Name; got != "LoginResponse" {
 		t.Fatalf("login return = %q, want LoginResponse", got)
+	}
+	if got := api.Funcs[1].Codegen.BridgeCall; got != model.CallHintNoInline {
+		t.Fatalf("login bridge call hint = %q, want noinline", got)
+	}
+	if !api.Funcs[1].Codegen.GoNoInline {
+		t.Fatal("login should enable go noinline hint")
 	}
 	if !api.Funcs[2].CanErr {
 		t.Fatal("login_checked should be marked CanErr")
