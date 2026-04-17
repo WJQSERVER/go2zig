@@ -9,9 +9,8 @@
 #define RTMP0 R9
 #define RTMP1 R10
 #define RTMP2 R11
-#define SHADOW_SPACE SUBQ $32, SP
-#define RESTORE_SHADOW ADDQ $32, SP
-
+#define G0_SHADOW_SPACE SUBQ $32, SP
+#define RESTORE_G0_SHADOW ADDQ $32, SP
 #define G0ASMCALL_NORET                                      \
     MOVQ    SP, RTMP0                                        \
     MOVQ    0x30(g), RTMP1                                   \
@@ -22,9 +21,9 @@
     ANDQ    $-16, SP                                         \
     PUSHQ   RTMP0                                            \
     PUSHQ   RTMP2                                            \
-    SHADOW_SPACE                                             \
+    G0_SHADOW_SPACE                                          \
     CALL    AX                                               \
-    RESTORE_SHADOW                                           \
+    RESTORE_G0_SHADOW                                        \
     POPQ    g                                                \
     POPQ    SP                                               \
     RET
@@ -39,22 +38,28 @@
     ANDQ    $-16, SP                                         \
     PUSHQ   RTMP0                                            \
     PUSHQ   RTMP2                                            \
-    SHADOW_SPACE                                             \
+    G0_SHADOW_SPACE                                          \
     CALL    AX                                               \
-    RESTORE_SHADOW                                           \
+    RESTORE_G0_SHADOW                                        \
     POPQ    g                                                \
     POPQ    SP
 
 #define ASMCALL_NORET                                        \
-    SHADOW_SPACE                                             \
+    MOVQ    SP, RTMP0                                        \
+    ANDQ    $-16, SP                                         \
+    SUBQ    $48, SP                                          \
+    MOVQ    RTMP0, 40(SP)                                    \
     CALL    AX                                               \
-    RESTORE_SHADOW                                           \
+    MOVQ    40(SP), SP                                       \
     RET
 
 #define ASMCALL_R1                                           \
-    SHADOW_SPACE                                             \
+    MOVQ    SP, RTMP0                                        \
+    ANDQ    $-16, SP                                         \
+    SUBQ    $48, SP                                          \
+    MOVQ    RTMP0, 40(SP)                                    \
     CALL    AX                                               \
-    RESTORE_SHADOW
+    MOVQ    40(SP), SP
 
 TEXT ·CallFuncG0P0(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX
@@ -100,9 +105,9 @@ TEXT ·CallFuncG0P2StoreR1(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	PUSHQ	RTMP2
 	PUSHQ	BX
 	SUBQ	$8, SP
-	SHADOW_SPACE
+	G0_SHADOW_SPACE
 	CALL	AX
-	RESTORE_SHADOW
+	RESTORE_G0_SHADOW
 	ADDQ	$8, SP
 	POPQ	BX
 	MOVQ	RRET, 0(BX)

@@ -97,10 +97,36 @@ func TestCopyStreamFileHandles(t *testing.T) {
 		}
 	})
 
+	payload := bytes.Repeat([]byte("go2zig-stream-copy-"), 1024)
+	copyStreamFileHandlesOnce(t, client, payload)
+}
+
+func TestCopyStreamFileHandlesRepeated(t *testing.T) {
+	prepareStreamRuntime(t)
+	client := NewGo2ZigClient(prepareRuntimePath)
+	if err := client.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if client != nil && client.rt != nil && client.rt.lib != nil {
+			_ = client.rt.lib.Close()
+		}
+	})
+
+	payload := bytes.Repeat([]byte("go2zig-stream-copy-repeat-"), 512)
+	for i := 0; i < 32; i++ {
+		t.Run(fmt.Sprintf("iter-%02d", i), func(t *testing.T) {
+			copyStreamFileHandlesOnce(t, client, payload)
+		})
+	}
+}
+
+func copyStreamFileHandlesOnce(t *testing.T, client *Go2ZigClient, payload []byte) {
+	t.Helper()
+
 	dir := t.TempDir()
 	srcPath := filepath.Join(dir, "in.bin")
 	dstPath := filepath.Join(dir, "out.bin")
-	payload := bytes.Repeat([]byte("go2zig-stream-copy-"), 1024)
 	if err := os.WriteFile(srcPath, payload, 0o644); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", srcPath, err)
 	}
