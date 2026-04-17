@@ -86,8 +86,16 @@ func TestEnsureStreamLoadedKeepsLoadedRuntime(t *testing.T) {
 }
 
 func TestCopyStreamFileHandles(t *testing.T) {
-	t.Parallel()
-	ensureStreamLoaded(t)
+	prepareStreamRuntime(t)
+	client := NewGo2ZigClient(prepareRuntimePath)
+	if err := client.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if client != nil && client.rt != nil && client.rt.lib != nil {
+			_ = client.rt.lib.Close()
+		}
+	})
 
 	dir := t.TempDir()
 	srcPath := filepath.Join(dir, "in.bin")
@@ -97,77 +105,6 @@ func TestCopyStreamFileHandles(t *testing.T) {
 		t.Fatalf("WriteFile(%s) error = %v", srcPath, err)
 	}
 
-	src, err := os.Open(srcPath)
-	if err != nil {
-		t.Fatalf("Open(%s) error = %v", srcPath, err)
-	}
-	defer func() { _ = src.Close() }()
-	dst, err := os.OpenFile(dstPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		t.Fatalf("OpenFile(%s) error = %v", dstPath, err)
-	}
-	defer func() { _ = dst.Close() }()
-
-	reader, err := NewGoReader(src)
-	if err != nil {
-		t.Fatalf("NewGoReader() error = %v", err)
-	}
-	writer, err := NewGoWriter(dst)
-	if err != nil {
-		t.Fatalf("NewGoWriter() error = %v", err)
-	}
-
-	n, err := CopyStream(reader, writer)
-	if err != nil {
-		t.Fatalf("CopyStream() error = %v", err)
-	}
-	if n != uint64(len(payload)) {
-		t.Fatalf("CopyStream() = %d, want %d", n, len(payload))
-	}
-	if err := reader.Err(); err != nil {
-		t.Fatalf("reader.Err() error = %v", err)
-	}
-	if err := writer.Err(); err != nil {
-		t.Fatalf("writer.Err() error = %v", err)
-	}
-	if _, err := src.Seek(0, 0); err != nil {
-		t.Fatalf("src.Seek() error = %v", err)
-	}
-	if _, err := dst.Seek(0, 0); err != nil {
-		t.Fatalf("dst.Seek() error = %v", err)
-	}
-
-	got, err := os.ReadFile(dstPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s) error = %v", dstPath, err)
-	}
-	if !bytes.Equal(got, payload) {
-		t.Fatalf("copied payload mismatch: got %d bytes, want %d", len(got), len(payload))
-	}
-}
-
-func TestCopyStreamHandlesPartialWrites(t *testing.T) {
-	t.Parallel()
-
-	runtimeSource := strings.Replace(
-		string(readStreamExampleFile(t, "go2zig_runtime.zig")),
-		"return file.write(buffer) catch { return error.StreamWriteFailed; };",
-		"const limit = @min(buffer.len, @as(usize, 17));\n    return file.write(buffer[0..limit]) catch { return error.StreamWriteFailed; };",
-		1,
-	)
-	libPath := buildCustomStreamRuntime(t, "", runtimeSource)
-	client := NewGo2ZigClient(libPath)
-	if err := client.Load(); err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	dir := t.TempDir()
-	srcPath := filepath.Join(dir, "in.bin")
-	dstPath := filepath.Join(dir, "out.bin")
-	payload := bytes.Repeat([]byte("go2zig-stream-partial-write-"), 512)
-	if err := os.WriteFile(srcPath, payload, 0o644); err != nil {
-		t.Fatalf("WriteFile(%s) error = %v", srcPath, err)
-	}
 	src, err := os.Open(srcPath)
 	if err != nil {
 		t.Fatalf("Open(%s) error = %v", srcPath, err)
@@ -201,6 +138,13 @@ func TestCopyStreamHandlesPartialWrites(t *testing.T) {
 	if err := writer.Err(); err != nil {
 		t.Fatalf("writer.Err() error = %v", err)
 	}
+	if _, err := src.Seek(0, 0); err != nil {
+		t.Fatalf("src.Seek() error = %v", err)
+	}
+	if _, err := dst.Seek(0, 0); err != nil {
+		t.Fatalf("dst.Seek() error = %v", err)
+	}
+
 	got, err := os.ReadFile(dstPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s) error = %v", dstPath, err)
@@ -210,9 +154,65 @@ func TestCopyStreamHandlesPartialWrites(t *testing.T) {
 	}
 }
 
+func TestCopyStreamHandlesPartialWrites(t *testing.T) {
+	runtimeSource := strings.Replace(
+		string(readStreamExampleFile(t, "go2zig_runtime.zig")),
+		"if (buffer.len > available) return error.StreamWriteFailed;\n        const dst = @as([*]u8, @ptrCast(state.ptr.?))[state.len..][0..buffer.len];\n        @memcpy(dst, buffer);\n        state.len += buffer.len;\n        return buffer.len;",
+		"const limit = @min(buffer.len, @as(usize, 17));\n        if (limit > available) return error.StreamWriteFailed;\n        const dst = @as([*]u8, @ptrCast(state.ptr.?))[state.len..][0..limit];\n        @memcpy(dst, buffer[0..limit]);\n        state.len += limit;\n        return limit;",
+		1,
+	)
+	libPath := buildCustomStreamRuntime(t, "", runtimeSource)
+	client := NewGo2ZigClient(libPath)
+	if err := client.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if client != nil && client.rt != nil && client.rt.lib != nil {
+			_ = client.rt.lib.Close()
+		}
+	})
+
+	payload := bytes.Repeat([]byte("go2zig-stream-partial-write-"), 512)
+	reader, err := NewGoReader(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("NewGoReader() error = %v", err)
+	}
+	var dst bytes.Buffer
+	writer, err := NewGoWriter(&dst)
+	if err != nil {
+		t.Fatalf("NewGoWriter() error = %v", err)
+	}
+
+	n, err := client.CopyStream(reader, writer)
+	if err != nil {
+		t.Fatalf("CopyStream() error = %v", err)
+	}
+	if n != uint64(len(payload)) {
+		t.Fatalf("CopyStream() = %d, want %d", n, len(payload))
+	}
+	if err := reader.Err(); err != nil {
+		t.Fatalf("reader.Err() error = %v", err)
+	}
+	if err := writer.Err(); err != nil {
+		t.Fatalf("writer.Err() error = %v", err)
+	}
+	got := dst.Bytes()
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("copied payload mismatch: got %d bytes, want %d", len(got), len(payload))
+	}
+}
+
 func TestCopyStreamDoesNotPanicOnWriterCloseError(t *testing.T) {
-	t.Parallel()
-	ensureStreamLoaded(t)
+	prepareStreamRuntime(t)
+	client := NewGo2ZigClient(prepareRuntimePath)
+	if err := client.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if client != nil && client.rt != nil && client.rt.lib != nil {
+			_ = client.rt.lib.Close()
+		}
+	})
 
 	reader, err := NewGoReader(strings.NewReader("close-error"))
 	if err != nil {
@@ -232,7 +232,7 @@ func TestCopyStreamDoesNotPanicOnWriterCloseError(t *testing.T) {
 				didPanic = true
 			}
 		}()
-		n, err := CopyStream(reader, writer)
+		n, err := client.CopyStream(reader, writer)
 		if err != nil {
 			t.Fatalf("CopyStream() error = %v", err)
 		}

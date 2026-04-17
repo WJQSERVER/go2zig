@@ -13,7 +13,7 @@
 每个矩阵条目都会：
 
 - 安装 `go.mod` 指定的 Go 版本
-- 安装 Zig `0.15.2`
+- 安装 Zig `0.16.0`
 - 先为 `examples/basic` 生成最新的 Go 包装与 Zig 桥接文件
 - 运行 `go test ./...`
 - 运行 `go test -run ^$ -bench . ./...`

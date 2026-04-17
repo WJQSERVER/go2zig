@@ -20,7 +20,7 @@ Unsupported platforms:
 ### Software Requirements
 
 - Go `1.26`
-- Zig `0.15.2`
+- Zig `0.16.0`
 
 ## 2. Prepare API Description File
 

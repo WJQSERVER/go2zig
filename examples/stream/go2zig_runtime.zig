@@ -57,15 +57,22 @@ const DirectWriterState = extern struct {
     cap: usize,
 };
 
-inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle {
-    return switch (@typeInfo(std.fs.File.Handle)) {
-        .pointer => @as(std.fs.File.Handle, @ptrFromInt(value)),
-        else => @as(std.fs.File.Handle, @intCast(value)),
+inline fn streamHandleFromUsize(value: usize) std.Io.File.Handle {
+    return switch (@typeInfo(std.Io.File.Handle)) {
+        .pointer => @as(std.Io.File.Handle, @ptrFromInt(value)),
+        else => @as(std.Io.File.Handle, @intCast(value)),
     };
 }
 
-inline fn streamHandleFromEncoded(value: usize) std.fs.File.Handle {
+inline fn streamHandleFromEncoded(value: usize) std.Io.File.Handle {
     return streamHandleFromUsize((value >> 2) - 1);
+}
+
+inline fn streamFileFromEncoded(value: usize) std.Io.File {
+    return .{
+        .handle = streamHandleFromEncoded(value),
+        .flags = .{ .nonblocking = false },
+    };
 }
 
 inline fn directReaderStateFromHandle(value: usize) *DirectReaderState {
@@ -90,9 +97,13 @@ pub fn streamRead(reader: usize, buffer: []u8) error{StreamReadFailed, EndOfStre
         return n;
     }
     if (tag != 0) return error.StreamReadFailed;
-    const file: std.fs.File = .{ .handle = streamHandleFromEncoded(reader) };
-    const n = file.read(buffer) catch { return error.StreamReadFailed; };
-    if (n == 0) return error.EndOfStream;
+    const file = streamFileFromEncoded(reader);
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    const n = file.readStreaming(io, &.{buffer}) catch |err| switch (err) {
+        error.EndOfStream => return error.EndOfStream,
+        else => return error.StreamReadFailed,
+    };
     return n;
 }
 
@@ -110,8 +121,10 @@ pub fn streamWrite(writer: usize, buffer: []const u8) error{StreamWriteFailed}!u
         return buffer.len;
     }
     if (tag != 0) return error.StreamWriteFailed;
-    const file: std.fs.File = .{ .handle = streamHandleFromEncoded(writer) };
-    return file.write(buffer) catch { return error.StreamWriteFailed; };
+    const file = streamFileFromEncoded(writer);
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    return file.writeStreaming(io, &.{}, &.{buffer}, 1) catch { return error.StreamWriteFailed; };
 }
 
 pub fn makeError(err: anyerror) ErrorInfo {

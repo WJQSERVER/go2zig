@@ -322,7 +322,7 @@ func TestRenderStreamsWithExperimentalFlag(t *testing.T) {
 	}
 
 	runtimeText := string(RenderZigRuntime(api, Config{APIModule: "api.zig", StreamExperimental: true}))
-	for _, check := range []string{"inline fn streamHandleFromUsize(value: usize) std.fs.File.Handle", "inline fn streamHandleFromEncoded(value: usize) std.fs.File.Handle", "const stream_handle_direct_reader: usize = 0x1;", "const DirectReaderState = extern struct", "const DirectWriterState = extern struct", "pub fn streamRead(reader: usize, buffer: []u8)", "pub fn streamWrite(writer: usize, buffer: []const u8)", "std.fs.File = .{ .handle = streamHandleFromEncoded(reader) }"} {
+	for _, check := range []string{"inline fn streamHandleFromUsize(value: usize) std.Io.File.Handle", "inline fn streamHandleFromEncoded(value: usize) std.Io.File.Handle", "inline fn streamFileFromEncoded(value: usize) std.Io.File", "const stream_handle_direct_reader: usize = 0x1;", "const DirectReaderState = extern struct", "const DirectWriterState = extern struct", "pub fn streamRead(reader: usize, buffer: []u8)", "pub fn streamWrite(writer: usize, buffer: []const u8)", ".flags = .{ .nonblocking = false },", "var threaded: std.Io.Threaded = .init_single_threaded;", "const io = threaded.io();", "file.readStreaming(io, &.{buffer})", "file.writeStreaming(io, &.{}, &.{buffer}, 1)"} {
 		if !strings.Contains(runtimeText, check) {
 			t.Fatalf("RenderZigRuntime() missing %q\n%s", check, runtimeText)
 		}
