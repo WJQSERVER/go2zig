@@ -45,7 +45,7 @@ Languages: [English](README.md) | [简体中文](README_zh.md) | [日本語](REA
 ## Requirements
 
 - **Go** 1.26+
-- **Zig** 0.15.2
+- **Zig** 0.16.0
 - **Platform**: Windows/Linux（`amd64` と `arm64`）および Darwin（`arm64` のみ）
 
 ## Supported Types

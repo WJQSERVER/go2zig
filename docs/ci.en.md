@@ -13,7 +13,7 @@ The current CI runs as a 5-target matrix:
 Every matrix entry does the following:
 
 - Install the Go version declared in `go.mod`
-- Install Zig `0.15.2`
+- Install Zig `0.16.0`
 - Regenerate `examples/basic` before testing
 - Run `go test ./...`
 - Run `go test -run ^$ -bench . ./...`

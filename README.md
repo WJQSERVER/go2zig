@@ -46,7 +46,7 @@ These targets currently run tests, benchmarks, and build checks in main CI.
 ## Requirements
 
 - **Go** 1.26+
-- **Zig** 0.15.2
+- **Zig** 0.16.0
 - **Platform**: Windows/Linux (`amd64` and `arm64`) or Darwin (`arm64` only)
 
 ## Supported Types

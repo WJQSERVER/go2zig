@@ -7,27 +7,31 @@
 #define RARG1 DX
 #define RARG2 R8
 #define RRET AX
-#define SHADOW_SPACE SUBQ $32, SP
-#define RESTORE_SHADOW ADDQ $32, SP
+#define RTMP0 R9
 #else
 #define RARG0 DI
 #define RARG1 SI
 #define RARG2 DX
 #define RRET AX
-#define SHADOW_SPACE
-#define RESTORE_SHADOW
+#define RTMP0 CX
 #endif
 
 #define ASMCALL_NORET                                        \
-    SHADOW_SPACE                                             \
+    MOVQ    SP, RTMP0                                        \
+    ANDQ    $-16, SP                                         \
+    SUBQ    $16, SP                                          \
+    MOVQ    RTMP0, 8(SP)                                     \
     CALL    AX                                               \
-    RESTORE_SHADOW                                           \
+    MOVQ    8(SP), SP                                        \
     RET
 
 #define ASMCALL_R1                                           \
-    SHADOW_SPACE                                             \
+    MOVQ    SP, RTMP0                                        \
+    ANDQ    $-16, SP                                         \
+    SUBQ    $16, SP                                          \
+    MOVQ    RTMP0, 8(SP)                                     \
     CALL    AX                                               \
-    RESTORE_SHADOW
+    MOVQ    8(SP), SP
 
 TEXT ·CallFuncP0(SB), NOSPLIT|NOPTR|NOFRAME, $0
 	MOVQ	fn+0x0(FP), AX

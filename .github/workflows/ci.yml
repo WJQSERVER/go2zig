@@ -10,7 +10,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-winarm64-runtime:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Cross-compile windows arm64 basic runtime
+        shell: pwsh
+        run: |
+          $outDir = Join-Path $env:RUNNER_TEMP "basic-winarm64"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $outPath = Join-Path $outDir "basic.dll"
+          & zig build-lib -dynamic -target aarch64-windows -O ReleaseSafe "-femit-bin=$outPath" examples/basic/go2zig_build_root.zig
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basic-winarm64-runtime
+          path: ${{ runner.temp }}/basic-winarm64/basic.dll
+
   test:
+    needs: build-winarm64-runtime
     strategy:
       fail-fast: false
       matrix:
@@ -18,43 +38,53 @@ jobs:
           - os: windows-latest
             goos: windows
             goarch: amd64
+            setup_zig: true
             run_tests: true
             run_bench: true
             test_cmd: "go test ./..."
             bench_cmd: "$env:GODEBUG='invalidptr=0,cgocheck=0'; go test -run ^$ -bench . ./..."
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'; go build ./..."
+            prepare_cmd: "go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic"
           - os: windows-11-arm
             goos: windows
             goarch: arm64
+            setup_zig: false
             run_tests: true
             run_bench: true
             test_cmd: "$env:CGO_ENABLED='0'; go test ./..."
             bench_cmd: "$env:CGO_ENABLED='0'; $env:GODEBUG='invalidptr=0,cgocheck=0'; go test -run ^$ -bench . ./..."
             build_cmd: "$env:GOOS='windows'; $env:GOARCH='arm64'; $env:CGO_ENABLED='0'; go build ./..."
+            prepare_cmd: "go run ./cmd/go2zig -no-build -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic"
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
+            setup_zig: true
             run_tests: true
             run_bench: true
             test_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./..."
             bench_cmd: "GODEBUG=invalidptr=0,cgocheck=0 GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./..."
+            prepare_cmd: "go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic"
           - os: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
+            setup_zig: true
             run_tests: true
             run_bench: true
             test_cmd: "GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test ./..."
             bench_cmd: "GODEBUG=invalidptr=0,cgocheck=0 GO2ZIG_RUN_LINUX_RUNTIME_TESTS=1 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./..."
+            prepare_cmd: "go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic"
           - os: macos-latest
             goos: darwin
             goarch: arm64
+            setup_zig: true
             run_tests: true
             run_bench: true
             test_cmd: "go test ./..."
             bench_cmd: "GODEBUG=invalidptr=0,cgocheck=0 go test -run ^$ -bench . ./..."
             build_cmd: "GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./..."
+            prepare_cmd: "go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic"
     name: ${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -64,10 +94,21 @@ jobs:
           go-version-file: go.mod
           cache: false
       - uses: mlugg/setup-zig@v2
+        if: ${{ matrix.setup_zig }}
         with:
-          version: 0.15.2
+          version: 0.16.0
+      - uses: actions/download-artifact@v4
+        if: ${{ matrix.goos == 'windows' && matrix.goarch == 'arm64' }}
+        with:
+          name: basic-winarm64-runtime
+          path: ${{ runner.temp }}/basic-winarm64
+      - name: Configure prebuilt runtime for windows-arm64
+        if: ${{ matrix.goos == 'windows' && matrix.goarch == 'arm64' }}
+        shell: pwsh
+        run: |
+          "GO2ZIG_BASIC_RUNTIME_PATH=$env:RUNNER_TEMP/basic-winarm64/basic.dll" >> $env:GITHUB_ENV
       - name: Prepare basic example
-        run: go run ./cmd/go2zig -api ./examples/basic/api.zig -zig ./examples/basic/lib.zig -out ./examples/basic/gen.go -pkg main -lib basic
+        run: ${{ matrix.prepare_cmd }}
       - name: Run tests
         if: ${{ matrix.run_tests }}
         run: ${{ matrix.test_cmd }}
