@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"unsafe"
 )
@@ -146,9 +145,6 @@ func BenchmarkStreamWriterPipeWriteCloser(b *testing.B) {
 
 func BenchmarkStreamCopyFileHandles(b *testing.B) {
 	b.ReportAllocs()
-	if runtime.GOOS == "windows" {
-		b.Skip("windows file-handle end-to-end stream benchmark is currently unstable")
-	}
 	ensureStreamLoaded(b)
 	dir := b.TempDir()
 	srcPath := filepath.Join(dir, "in.bin")

@@ -94,14 +94,27 @@ const stream_is_windows = builtin.os.tag == .windows;
 
 inline fn streamReadCompat(handle: std.Io.File.Handle, buffer: []u8) anyerror!usize {
     if (stream_is_windows) {
-        return std.os.windows.ReadFile(handle, buffer, null);
+        const io = std.Io.Threaded.global_single_threaded.io();
+        const file: std.Io.File = .{
+            .handle = handle,
+            .flags = .{ .nonblocking = false },
+        };
+        return file.readStreaming(io, &.{buffer}) catch |err| switch (err) {
+            error.EndOfStream => 0,
+            else => err,
+        };
     }
     return std.posix.read(handle, buffer);
 }
 
 inline fn streamWriteCompat(handle: std.Io.File.Handle, buffer: []const u8) anyerror!usize {
     if (stream_is_windows) {
-        return std.os.windows.WriteFile(handle, buffer, null);
+        const io = std.Io.Threaded.global_single_threaded.io();
+        const file: std.Io.File = .{
+            .handle = handle,
+            .flags = .{ .nonblocking = false },
+        };
+        return file.writeStreaming(io, &.{}, &.{buffer}, 1);
     }
     while (true) {
         const rc = std.posix.system.write(handle, buffer.ptr, buffer.len);
