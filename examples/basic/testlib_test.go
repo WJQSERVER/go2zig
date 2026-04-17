@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -18,9 +19,25 @@ var (
 	prepareRuntimeErr  error
 )
 
+const basicRuntimePathEnv = "GO2ZIG_BASIC_RUNTIME_PATH"
+
 func prepareExampleRuntime(tb testing.TB) {
 	tb.Helper()
 	prepareRuntimeOnce.Do(func() {
+		if override := os.Getenv(basicRuntimePathEnv); override != "" {
+			path, err := filepath.Abs(override)
+			if err != nil {
+				prepareRuntimeErr = fmt.Errorf("resolve %s: %w", basicRuntimePathEnv, err)
+				return
+			}
+			if _, err := os.Stat(path); err != nil {
+				prepareRuntimeErr = fmt.Errorf("stat %s=%q: %w", basicRuntimePathEnv, path, err)
+				return
+			}
+			prepareRuntimePath = path
+			return
+		}
+
 		zigPath, err := exec.LookPath("zig")
 		if err != nil {
 			prepareRuntimeSkip = "zig not available in PATH"
