@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"go2zig/internal/model"
+	"github.com/WJQSERVER/go2zig/internal/model"
 )
 
 var (

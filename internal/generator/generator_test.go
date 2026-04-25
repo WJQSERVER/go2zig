@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"go2zig/internal/parser"
+	"github.com/WJQSERVER/go2zig/internal/parser"
 )
 
 func TestRender(t *testing.T) {

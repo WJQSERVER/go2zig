@@ -5,7 +5,7 @@ package dynlib
 import (
 	"fmt"
 
-	"go2zig/internal/rtld"
+	"github.com/WJQSERVER/go2zig/internal/rtld"
 )
 
 type Library struct {

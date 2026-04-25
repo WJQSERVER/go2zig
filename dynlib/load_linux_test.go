@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"go2zig/dynlib"
+	"github.com/WJQSERVER/go2zig/dynlib"
 )
 
 func TestLoadAndLookupLinux(t *testing.T) {

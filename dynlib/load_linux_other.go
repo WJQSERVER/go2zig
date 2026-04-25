@@ -4,7 +4,7 @@ package dynlib
 
 import (
 	"fmt"
-	"go2zig/asmcall"
+	"github.com/WJQSERVER/go2zig/asmcall"
 	"unsafe"
 	_ "unsafe"
 )

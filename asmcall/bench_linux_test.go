@@ -8,7 +8,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"go2zig/asmcall"
+	"github.com/WJQSERVER/go2zig/asmcall"
 )
 
 func BenchmarkDynlibDLSym(b *testing.B) {

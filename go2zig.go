@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"strings"
 
-	"go2zig/internal/generator"
-	"go2zig/internal/parser"
+	"github.com/WJQSERVER/go2zig/internal/generator"
+	"github.com/WJQSERVER/go2zig/internal/parser"
 )
 
 type GenerateConfig struct {

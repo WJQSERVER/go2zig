@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"go2zig/asmcall"
+	"github.com/WJQSERVER/go2zig/asmcall"
 )
 
 func BenchmarkCgoAddU64(b *testing.B) {
