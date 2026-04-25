@@ -10,8 +10,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"go2zig/asmcall"
-	"go2zig/dynlib"
+	"github.com/WJQSERVER/go2zig/asmcall"
+	"github.com/WJQSERVER/go2zig/dynlib"
 )
 
 type Go2ZigClient struct {

@@ -3,7 +3,7 @@ package generator
 import (
 	"testing"
 
-	"go2zig/internal/parser"
+	"github.com/WJQSERVER/go2zig/internal/parser"
 )
 
 func BenchmarkRenderSampleAPI(b *testing.B) {

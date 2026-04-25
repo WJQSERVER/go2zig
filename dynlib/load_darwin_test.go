@@ -5,7 +5,7 @@ package dynlib_test
 import (
 	"testing"
 
-	"go2zig/dynlib"
+	"github.com/WJQSERVER/go2zig/dynlib"
 )
 
 func TestLoadAndLookupDarwin(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"go2zig/internal/model"
+	"github.com/WJQSERVER/go2zig/internal/model"
 )
 
 func TestParseRejectsMalformedOptionalType(t *testing.T) {

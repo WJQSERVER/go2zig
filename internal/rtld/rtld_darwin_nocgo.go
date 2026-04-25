@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"unsafe"
 
-	_ "go2zig/internal/rtld/fakecgo"
+	_ "github.com/WJQSERVER/go2zig/internal/rtld/fakecgo"
 )
 
 func Available() bool {

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"unsafe"
 
-	"go2zig/asmcall"
-	"go2zig/dynlib"
+	"github.com/WJQSERVER/go2zig/asmcall"
+	"github.com/WJQSERVER/go2zig/dynlib"
 )
 
 func TestCallFuncG0P3StoreSum(t *testing.T) {

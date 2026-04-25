@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"go2zig/internal/model"
-	"go2zig/internal/names"
+	"github.com/WJQSERVER/go2zig/internal/model"
+	"github.com/WJQSERVER/go2zig/internal/names"
 )
 
 type Config struct {
@@ -47,8 +47,8 @@ func Render(api *model.API, cfg Config) ([]byte, error) {
 	body.WriteString("\t\"runtime\"\n")
 	body.WriteString("\t\"sync\"\n")
 	body.WriteString("\t\"unsafe\"\n\n")
-	body.WriteString("\t\"go2zig/asmcall\"\n")
-	body.WriteString("\t\"go2zig/dynlib\"\n")
+	body.WriteString("\t\"github.com/WJQSERVER/go2zig/asmcall\"\n")
+	body.WriteString("\t\"github.com/WJQSERVER/go2zig/dynlib\"\n")
 	if apiUsesStreams(api) {
 		body.WriteString("\t\"bytes\"\n")
 		body.WriteString("\t\"io\"\n")

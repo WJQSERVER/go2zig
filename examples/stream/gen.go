@@ -11,8 +11,8 @@ import (
 	"unsafe"
 
 	"bytes"
-	"go2zig/asmcall"
-	"go2zig/dynlib"
+	"github.com/WJQSERVER/go2zig/asmcall"
+	"github.com/WJQSERVER/go2zig/dynlib"
 	"io"
 	"os"
 	"strings"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"go2zig"
+	"github.com/WJQSERVER/go2zig"
 )
 
 func main() {
