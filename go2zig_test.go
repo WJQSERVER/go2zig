@@ -708,7 +708,7 @@ func TestBuilderGeneratedProgramStreamsReaderWriterAndClosers(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/streamsample\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/streamsample\n\ngo 1.26.0\n\nrequire github.com/WJQSERVER/go2zig v0.0.0\n\nreplace github.com/WJQSERVER/go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
 	writeFile(t, filepath.Join(dir, "api.zig"), `
 pub const String = extern struct {
     ptr: [*]const u8,
@@ -871,7 +871,7 @@ func TestBuilderGeneratedProgramStreamsPipeEndpoints(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/streampipe\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/streampipe\n\ngo 1.26.0\n\nrequire github.com/WJQSERVER/go2zig v0.0.0\n\nreplace github.com/WJQSERVER/go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
 	writeFile(t, filepath.Join(dir, "api.zig"), `
 pub const String = extern struct {
     ptr: [*]const u8,
@@ -1220,7 +1220,7 @@ func TestBuilderGeneratedProgramRuns(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/sample\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/sample\n\ngo 1.26.0\n\nrequire github.com/WJQSERVER/go2zig v0.0.0\n\nreplace github.com/WJQSERVER/go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
 	writeFile(t, filepath.Join(dir, "api.zig"), integrationAPI)
 	writeFile(t, filepath.Join(dir, "lib.zig"), integrationLib)
 
@@ -1308,7 +1308,7 @@ func TestBuilderGeneratedProgramFailsWithoutLibrary(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/missing\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/missing\n\ngo 1.26.0\n\nrequire github.com/WJQSERVER/go2zig v0.0.0\n\nreplace github.com/WJQSERVER/go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
 	writeFile(t, filepath.Join(dir, "api.zig"), integrationAPI)
 	writeFile(t, filepath.Join(dir, "lib.zig"), integrationLib)
 	outPath := filepath.Join(dir, "gen.go")
@@ -1363,7 +1363,7 @@ func TestGeneratedClientFailsWhenSymbolMissing(t *testing.T) {
 	if !strings.Contains(string(bridgeText), `const api = @import("api.zig");`) {
 		t.Fatalf("bridge zig should keep direct api import when Generate is used directly\n%s", bridgeText)
 	}
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/missingsymbol\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/missingsymbol\n\ngo 1.26.0\n\nrequire github.com/WJQSERVER/go2zig v0.0.0\n\nreplace github.com/WJQSERVER/go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
 	testFile := filepath.Join(dir, "gen_test.go")
 	writeFile(t, testFile, `package sample
 
@@ -1401,7 +1401,7 @@ func TestBuilderGeneratedProgramHandlesOptionalErrorSliceFailure(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/optionalslice\n\ngo 1.26.0\n\nrequire go2zig v0.0.0\n\nreplace go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/optionalslice\n\ngo 1.26.0\n\nrequire github.com/WJQSERVER/go2zig v0.0.0\n\nreplace github.com/WJQSERVER/go2zig => "+filepath.ToSlash(mustAbs(t, "."))+"\n")
 	writeFile(t, filepath.Join(dir, "api.zig"), `
 pub const String = extern struct {
     ptr: [*]const u8,
